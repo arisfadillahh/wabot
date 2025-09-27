@@ -1,0 +1,47 @@
+[dotenv@17.2.1] injecting env (5) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+🌐 Webhook listening on port 3000
+📱 Dashboard: http://31.97.106.122:3000
+🔧 Original endpoints: /send, /typing
+📊 Dashboard API: /api/chats, /api/messages/:chatId
+📦 Webhook Status: /api/webhook-status
+🔄 Retry Failed: /api/retry-failed-webhooks
+🗑️ Clear Cache: /api/clear-cache
+✅ Connected to SQLite database
+✅ Analytics table ready
+✅ Failed webhooks table ready
+✅ Chat settings table ready
+✅ Database initialization completed
+🔌 Dashboard client connected: 9StFxOzslrnjkAy0AAAB
+✅ WhatsApp client is ready and session saved!
+🔌 Dashboard client disconnected: 9StFxOzslrnjkAy0AAAB
+🔌 Dashboard client connected: Obg_E71ruqceSo-JAAAD
+Login attempt: {
+  receivedApiKey: 'otom...',
+  expectedApiKey: 'otom...',
+  apiKeyType: 'string',
+  expectedType: 'string',
+  apiKeyLength: 21,
+  expectedLength: 21
+}
+Login successful for API key
+📱 Fetching chats directly from WhatsApp...
+📱 Retrieved 35 chats from WhatsApp
+📱 Loaded 35 chats from WhatsApp (page 1)
+📱 Returning cached chats
+📱 Fetching chats directly from WhatsApp...
+📱 Retrieved 35 chats from WhatsApp
+📱 Loaded 35 chats from WhatsApp (page 1)
+📱 Fetching chats directly from WhatsApp...
+📱 Retrieved 35 chats from WhatsApp
+📱 Loaded 35 chats from WhatsApp (page 1)
+📱 Fetching chats directly from WhatsApp...
+❌ Failed to get chats from WhatsApp: Error: Protocol error (Runtime.callFunctionOn): Session closed. Most likely the page has been closed.
+    at CDPSessionImpl.send (/home/dev/Downloads/n8n bp/wwebjs-xperiment/node_modules/puppeteer-core/lib/cjs/puppeteer/common/Connection.js:316:35)
+    at ExecutionContext._ExecutionContext_evaluate (/home/dev/Downloads/n8n bp/wwebjs-xperiment/node_modules/puppeteer-core/lib/cjs/puppeteer/common/ExecutionContext.js:211:46)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async ExecutionContext.evaluate (/home/dev/Downloads/n8n bp/wwebjs-xperiment/node_modules/puppeteer-core/lib/cjs/puppeteer/common/ExecutionContext.js:107:16)
+❌ Failed to load chats from WhatsApp: Error: Protocol error (Runtime.callFunctionOn): Session closed. Most likely the page has been closed.
+    at CDPSessionImpl.send (/home/dev/Downloads/n8n bp/wwebjs-xperiment/node_modules/puppeteer-core/lib/cjs/puppeteer/common/Connection.js:316:35)
+    at ExecutionContext._ExecutionContext_evaluate (/home/dev/Downloads/n8n bp/wwebjs-xperiment/node_modules/puppeteer-core/lib/cjs/puppeteer/common/ExecutionContext.js:211:46)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async ExecutionContext.evaluate (/home/dev/Downloads/n8n bp/wwebjs-xperiment/node_modules/puppeteer-core/lib/cjs/puppeteer/common/ExecutionContext.js:107:16)
