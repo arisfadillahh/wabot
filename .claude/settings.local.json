@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm start:*)",
+      "Bash(npm install:*)",
+      "Bash(npm restart:*)",
+      "Bash(mkdir:*)",
+      "Bash(tree:*)",
+      "Bash(netstat:*)",
+      "Bash(ss:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(kill:*)",
+      "Bash(sqlite3:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(chmod:*)",
+      "Bash(find:*)",
+      "Bash(timeout:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm test)",
+      "Bash(PORT=3001 npm start)",
+      "Bash(PORT=3001 npm run dev)",
+      "Bash(echo:*)",
+      "Bash(sudo chown:*)",
+      "Bash(jobs:*)",
+      "Bash(sudo:*)",
+      "Bash(grep:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
