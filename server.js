@@ -36,6 +36,20 @@ app.use(helmet.contentSecurityPolicy({
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 
+// CORS middleware for frontend integration
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'http://localhost:3002');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, X-Session-Token, X-API-Key');
+  res.header('Access-Control-Allow-Credentials', 'true');
+
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
 // URL webhook n8n
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || 'https://n8n.srv963931.hstgr.cloud/webhook/whatsapp';
 const API_KEY = process.env.API_KEY;
@@ -1372,13 +1386,7 @@ app.post('/api/clear-cache', sessionAuthMiddleware, (req, res) => {
     res.json({ message: 'Cache cleared successfully' });
 });
 
-// Serve dashboard frontend
-app.use(express.static('public', {
-    setHeaders: (res) => {
-        res.set('X-Content-Type-Options', 'nosniff');
-        res.set('X-Frame-Options', 'DENY');
-    }
-}));
+// Frontend now handled by Next.js (public directory reserved for Next.js static assets)
 
 // Socket.IO untuk dashboard real-time
 io.on('connection', (socket) => {
