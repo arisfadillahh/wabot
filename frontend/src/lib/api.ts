@@ -15,19 +15,26 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    const authHeaders = this.getAuthHeaders();
+
+    console.log(`Making request to: ${url}`);
+    console.log('Auth headers:', authHeaders);
 
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
-        ...this.getAuthHeaders(),
+        ...authHeaders,
         ...options.headers,
       },
       credentials: 'include',
       ...options,
     });
 
+    console.log('Response status:', response.status);
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
+      console.error('API Error:', error);
       throw new Error(error.message || `HTTP ${response.status}`);
     }
 
@@ -60,6 +67,10 @@ class ApiClient {
     if (typeof window !== 'undefined') {
       // Try to get session from cookie first, then fallback to localStorage for migration
       const sessionToken = Cookies.get('_session') || localStorage.getItem('sessionToken');
+      const apiKey = Cookies.get('apiKey');
+
+      console.log('Auth debug - sessionToken:', sessionToken ? 'exists' : 'missing');
+      console.log('Auth debug - apiKey:', apiKey ? 'exists' : 'missing');
 
       if (sessionToken) {
         // Migrate from localStorage to cookie if needed
@@ -76,11 +87,17 @@ class ApiClient {
         headers['X-Session-Token'] = sessionToken;
       }
 
+      // Fallback to API key if no session
+      if (!sessionToken && apiKey) {
+        headers['X-API-Key'] = apiKey;
+      }
+
       if (this.csrfToken) {
         headers['X-CSRF-Token'] = this.csrfToken;
       }
     }
 
+    console.log('Auth headers:', Object.keys(headers));
     return headers;
   }
 

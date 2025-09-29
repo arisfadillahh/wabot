@@ -172,12 +172,15 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
     },
 
     fetchMessages: async (chatId: string) => {
+      console.log('Fetching messages for chat:', chatId);
       set({ isLoading: true, error: null });
 
       try {
         const response = await api.getMessages(chatId) as any;
+        console.log('Messages response:', response);
         set({ messages: response.messages || [], isLoading: false });
       } catch (error) {
+        console.error('Error fetching messages:', error);
         set({
           error: error instanceof Error ? error.message : 'Failed to fetch messages',
           isLoading: false,

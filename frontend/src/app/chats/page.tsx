@@ -66,6 +66,168 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
     }
   };
 
+  const getMessageContent = () => {
+    // Debug: Log the entire message structure
+    console.log('Message structure:', message);
+    console.log('Message content:', message.content);
+
+    // Get raw content first
+    let rawContent = '';
+
+    // Check for direct body first (most common for text messages)
+    if (message.content?.body) {
+      rawContent = message.content.body;
+    }
+    // Handle wwebjs message structure - try all possible fields
+    else if (message.content && typeof message.content === 'object') {
+      const content = message.content as any;
+
+      // Try all possible wwebjs content fields
+      if (content.body) rawContent = content.body;
+      else if (content.text) rawContent = content.text;
+      else if (content.caption) rawContent = content.caption;
+      else if (content.description) rawContent = content.description;
+      else if (content.content) rawContent = content.content; // Sometimes nested
+      else if (content._serializedData) rawContent = content._serializedData;
+      else if (content.id?.id) rawContent = content.id.id; // Sometimes message ID contains context
+      else if (content.filename) rawContent = content.filename;
+      else if (content.title) rawContent = content.title;
+    }
+    // Check if the message object itself has the content in different fields
+    else if (message.body) rawContent = message.body;
+    else if (message.text) rawContent = message.text;
+    else if (message.caption) rawContent = message.caption;
+    // If it's a revoked message, try to get the original content
+    else if (message.type === 'revoked' || message.content?.type === 'revoked') {
+      const content = message.content as any;
+      if (content && content.originalBody) rawContent = content.originalBody;
+      else if (content && content.originalText) rawContent = content.originalText;
+      else rawContent = "Pesan ini telah dihapus";
+    }
+    // Check if content is already a string
+    else if (typeof message.content === 'string') {
+      if (message.content === '[REVOKED]' || message.content.includes('REVOKED')) {
+        rawContent = "Pesan ini telah dihapus";
+      } else {
+        rawContent = message.content;
+      }
+    }
+    // Last resort fallback
+    else if (message.content) {
+      rawContent = String(message.content);
+    }
+    // If no content at all, show based on message type
+    else if (message.type === 'chat') rawContent = "💬 Pesan teks";
+    else if (message.type === 'image') rawContent = "🖼️ Gambar";
+    else if (message.type === 'video') rawContent = "🎥 Video";
+    else if (message.type === 'audio') rawContent = "🎵 Audio";
+    else if (message.type === 'document') rawContent = "📄 Dokumen";
+    else if (message.type === 'sticker') rawContent = "🏷️ Sticker";
+    else rawContent = `[${message.type?.toUpperCase() || 'MESSAGE'}]`;
+
+    // Apply WhatsApp-style formatting
+    return formatWhatsAppMessage(rawContent);
+  };
+
+  const formatWhatsAppMessage = (text: string) => {
+    if (!text) return '';
+
+    // First, handle line breaks by splitting into lines
+    const lines = text.split('\n');
+
+    return lines.map((line, lineIndex) => (
+      <div key={`line-${lineIndex}`}>
+        {formatWhatsAppLine(line)}
+        {lineIndex < lines.length - 1 && <br />}
+      </div>
+    ));
+  };
+
+  const formatWhatsAppLine = (text: string) => {
+    if (!text) return '';
+
+    // Create a React fragment with formatted spans
+    const parts: React.ReactNode[] = [];
+    let currentIndex = 0;
+
+    // WhatsApp formatting patterns
+    const patterns = [
+      { regex: /\*(.*?)\*/g, type: 'bold' }, // *bold*
+      { regex: /_(.*?)_/g, type: 'italic' }, // _italic_
+      { regex: /~(.*?)~/g, type: 'strikethrough' }, // ~strikethrough~
+      { regex: /```(.*?)```/gs, type: 'code' }, // ```code```
+      { regex: /`(.*?)`/g, type: 'inlineCode' }, // `inline code`
+    ];
+
+    const matches: Array<{start: number, end: number, type: string, content: string}> = [];
+
+    // Find all formatting matches
+    patterns.forEach(pattern => {
+      let match;
+      const regex = new RegExp(pattern.regex.source, pattern.regex.flags);
+      while ((match = regex.exec(text)) !== null) {
+        matches.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          type: pattern.type,
+          content: match[1]
+        });
+      }
+    });
+
+    // Sort matches by start position
+    matches.sort((a, b) => a.start - b.start);
+
+    // Build formatted content
+    matches.forEach((match, index) => {
+      // Add text before this match
+      if (match.start > currentIndex) {
+        parts.push(text.substring(currentIndex, match.start));
+      }
+
+      // Add formatted content
+      switch (match.type) {
+        case 'bold':
+          parts.push(<strong key={`bold-${index}`}>{match.content}</strong>);
+          break;
+        case 'italic':
+          parts.push(<em key={`italic-${index}`}>{match.content}</em>);
+          break;
+        case 'strikethrough':
+          parts.push(<s key={`strike-${index}`}>{match.content}</s>);
+          break;
+        case 'code':
+          parts.push(
+            <div key={`code-${index}`} className="bg-gray-800 text-white p-2 rounded my-1 font-mono text-sm">
+              {match.content}
+            </div>
+          );
+          break;
+        case 'inlineCode':
+          parts.push(
+            <code key={`inline-${index}`} className="bg-gray-200 text-gray-800 px-1 py-0.5 rounded font-mono text-sm">
+              {match.content}
+            </code>
+          );
+          break;
+      }
+
+      currentIndex = match.end;
+    });
+
+    // Add remaining text
+    if (currentIndex < text.length) {
+      parts.push(text.substring(currentIndex));
+    }
+
+    // If no formatting found, return text as is
+    if (parts.length === 0) {
+      return text;
+    }
+
+    return parts;
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -80,25 +242,9 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
               : 'bg-gray-200 text-gray-900 border border-gray-300' // Darker gray for received messages
           }`}
         >
-          {message.type === 'text' ? (
-            <p className="text-sm">
-              {typeof message.content === 'string'
-                ? message.content
-                : message.content?.text || message.content?.caption || JSON.stringify(message.content)}
-            </p>
-          ) : (
-            <div className="flex flex-col">
-              {(message.content && typeof message.content === 'string') && (
-                <p className="text-sm mb-2">{message.content}</p>
-              )}
-              {message.content?.caption && (
-                <p className="text-sm mb-2">{message.content.caption}</p>
-              )}
-              <div className="p-2 bg-gray-100 rounded">
-                <span className="text-xs">📎 {message.type.toUpperCase()}</span>
-              </div>
-            </div>
-          )}
+          <div className="text-sm whitespace-pre-wrap break-words overflow-hidden">
+            {getMessageContent()}
+          </div>
         </div>
         <div className={`flex items-center mt-1 space-x-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
           <span className="text-xs text-gray-500">
@@ -236,6 +382,7 @@ export default function ChatsPage() {
   // Fetch messages when chat is selected
   useEffect(() => {
     if (selectedChat) {
+      console.log('Selected chat changed, fetching messages for:', selectedChat.id);
       fetchMessages(selectedChat.id);
     }
   }, [selectedChat, fetchMessages]);
@@ -312,7 +459,7 @@ export default function ChatsPage() {
       .toUpperCase();
   };
 
-  console.log('Rendering ChatsPage with', chats.length, 'chats');
+  console.log('Rendering ChatsPage with', chats.length, 'chats', 'selectedChat:', selectedChat?.name, 'messages:', messages.length);
   return (
     <AuthGuard>
       <motion.div
