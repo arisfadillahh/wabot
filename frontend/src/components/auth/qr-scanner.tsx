@@ -19,9 +19,12 @@ export function QRScanner() {
 
   // Define callback functions with useCallback to avoid stale closures
   const handleQrReceived = useCallback((data: any) => {
-    console.log('QR received from backend:', data);
+    console.log('🎯 QR received from backend:', data);
+    console.log('🎯 QR data type:', data.qrDataUrl ? 'Data URL' : data.qrHtml ? 'HTML' : data.qrCode ? 'Raw QR' : 'Unknown');
     // Use the data URL if available, otherwise fall back to raw QR
-    setQrCode(data.qrDataUrl || data.qrHtml || data.qrCode);
+    const qrImageData = data.qrDataUrl || data.qrHtml || data.qrCode;
+    console.log('🎯 Setting QR code:', qrImageData ? 'QR data received' : 'No QR data');
+    setQrCode(qrImageData);
     setIsScanning(true);
     setStatus({
       ...(status || { isReady: false, isAuthenticated: false, isConnected: false }),
@@ -48,11 +51,21 @@ export function QRScanner() {
   }, [setStatus]);
 
   useEffect(() => {
+    console.log('🚀 QRScanner: Initializing QR scanner...');
+
+    // Force fetch status immediately
     fetchStatus();
 
-    // Set up WebSocket listeners
+    // Set up WebSocket listeners with faster connection
     if (!websocketService.isConnected()) {
-      websocketService.connect();
+      console.log('🔌 QRScanner: Connecting WebSocket...');
+      websocketService.connect({
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 10
+      });
+    } else {
+      console.log('🔌 QRScanner: WebSocket already connected');
     }
 
     // Register event listeners
@@ -60,16 +73,76 @@ export function QRScanner() {
     const unsubscribeReady = websocketService.on('whatsapp:ready', handleReady);
     const unsubscribeStatus = websocketService.on('whatsapp:status', handleStatusChange);
 
+    // Auto-request QR if WhatsApp is not ready after 1 second
+    const autoRequestTimeout = setTimeout(() => {
+      if (!status?.isReady && !qrCode) {
+        console.log('⚡ QRScanner: Auto-requesting QR generation...');
+        if (websocketService.isConnected()) {
+          websocketService.sendMessage('request-qr', {});
+        }
+      }
+    }, 1000);
+
+    // Set a timeout to request QR if not received within 3 seconds
+    const qrTimeout = setTimeout(() => {
+      if (!qrCode && !status?.isReady) {
+        console.log('⏰ QRScanner: No QR received after 3 seconds, requesting status refresh...');
+        fetchStatus();
+
+        // Try to manually trigger QR generation by connecting to WebSocket again
+        if (websocketService.isConnected()) {
+          console.log('🔄 QRScanner: Manually requesting QR via WebSocket...');
+          websocketService.sendMessage('request-qr', {});
+        }
+      }
+    }, 3000);
+
+    // Set another timeout for backup
+    const backupTimeout = setTimeout(() => {
+      if (!qrCode && !status?.isReady) {
+        console.log('⏰ QRScanner: Still no QR after 6 seconds, showing loading state...');
+        setIsScanning(true);
+      }
+    }, 6000);
+
     return () => {
       // Remove event listeners
       unsubscribeQr();
       unsubscribeReady();
       unsubscribeStatus();
+      clearTimeout(autoRequestTimeout);
+      clearTimeout(qrTimeout);
+      clearTimeout(backupTimeout);
     };
-  }, [fetchStatus, handleQrReceived, handleReady, handleStatusChange]);
+  }, [fetchStatus, handleQrReceived, handleReady, handleStatusChange, qrCode, status?.isReady]);
 
   const handleRefreshQR = async () => {
     try {
+      console.log('🔄 Manual QR refresh requested');
+      setQrCode(null);
+      setIsScanning(false);
+
+      // Force WebSocket reconnection
+      if (websocketService.isConnected()) {
+        websocketService.disconnect();
+      }
+
+      // Wait a bit then reconnect
+      setTimeout(() => {
+        websocketService.connect({
+          reconnection: true,
+          reconnectionDelay: 500,
+          reconnectionAttempts: 5
+        });
+
+        // Send manual QR request after connection
+        setTimeout(() => {
+          if (websocketService.isConnected()) {
+            websocketService.sendMessage('request-qr', {});
+          }
+        }, 1000);
+      }, 500);
+
       await fetchStatus();
       toast.success('QR code refresh requested');
     } catch (error) {

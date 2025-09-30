@@ -21,6 +21,7 @@ interface WhatsAppState {
   fetchMessages: (chatId: string) => Promise<void>;
   sendMessage: (to: string, message: string) => Promise<void>;
   searchMessages: (query: string, chatId?: string) => Promise<Message[]>;
+  markMessagesAsRead: (chatId: string) => Promise<void>;
   setStatus: (status: WhatsAppStatus) => void;
   addMessage: (message: Message) => void;
   updateMessageStatus: (messageId: string, status: Message['status']) => void;
@@ -32,12 +33,18 @@ interface WhatsAppState {
 
 // Helper function to extract message content
 const getMessageContentString = (message: Message): string => {
+  // WhatsApp Web.js messages have direct body property
+  if (message.body) return message.body;
+
+  // Check content object structure
   if (message.content?.body) return message.content.body;
   if (typeof message.content === 'string') return message.content;
   if (message.content?.text) return message.content.text;
   if (message.content?.caption) return message.content.caption;
   if (message.content?.description) return message.content.description;
-  return String(message.content || '');
+
+  // Fallback to content or empty string
+  return String(message.content || message.body || '');
 };
 
 export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
@@ -46,6 +53,7 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
     // New message event
     websocketService.on('message:new', (data) => {
       const state = get();
+      console.log('New message received:', data);
 
       // Add message to current chat if it matches
       if (state.selectedChat && data.chatId === state.selectedChat.id) {
@@ -62,10 +70,15 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
                 content: getMessageContentString(data.message)
               },
               timestamp: data.message.timestamp,
-              unreadCount: data.fromMe ? chat.unreadCount : chat.unreadCount + 1
+              unreadCount: data.message.fromMe ? chat.unreadCount : chat.unreadCount + 1
             }
           : chat
       );
+
+      const updatedChat = updatedChats.find(c => c.id === data.chatId);
+      console.log('Updated chats with new message:', updatedChat);
+      console.log('Chat AI mode:', updatedChat?.aiMode);
+      console.log('Should appear in Human Agent tab:', !updatedChat?.aiMode);
 
       // Update chats without triggering loading animation
       set({ chats: updatedChats, isLoading: false });
@@ -104,6 +117,33 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
 
   // Initialize WebSocket listeners
   setupWebSocketListeners();
+
+  // Log WebSocket connection status
+  console.log('WebSocket connection status:', websocketService.getConnectionState());
+  console.log('WebSocket connected:', websocketService.isConnected());
+
+  // Try to connect WebSocket manually
+  setTimeout(() => {
+    console.log('WebSocket service connection status:', websocketService.isConnected());
+    console.log('WebSocket connection state:', websocketService.getConnectionState());
+
+    if (!websocketService.isConnected()) {
+      console.log('Attempting to connect WebSocket manually...');
+      websocketService.connect();
+
+      // Test connection after 2 seconds
+      setTimeout(() => {
+        console.log('After manual connect - WebSocket connected:', websocketService.isConnected());
+        console.log('After manual connect - WebSocket state:', websocketService.getConnectionState());
+
+        // Try to test WebSocket by sending a ping
+        if (websocketService.isConnected()) {
+          console.log('Testing WebSocket connection...');
+          websocketService.sendMessage('test', { message: 'ping' });
+        }
+      }, 2000);
+    }
+  }, 1000);
 
   return {
     status: null,
@@ -162,10 +202,21 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
         console.log('Extracted chats:', chats.length, 'chats');
         console.log('First chat sample:', chats[0]);
 
-        // For now, use default AI mode without fetching settings to test
+        // Get saved chat mode settings from localStorage
+        let savedChatModes: Record<string, boolean> = {};
+        try {
+          const saved = localStorage.getItem('chatModeSettings');
+          if (saved) {
+            savedChatModes = JSON.parse(saved);
+          }
+        } catch (error) {
+          console.warn('Failed to load chat mode settings from localStorage:', error);
+        }
+
+        // Update chats with saved AI mode settings, default to true if not saved
         const updatedChats = chats.map(chat => ({
           ...chat,
-          aiMode: true // Default to AI mode for testing
+          aiMode: savedChatModes[chat.id] ?? true
         }));
 
         set({ chats: updatedChats, isLoading: false });
@@ -198,10 +249,21 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
                 chats = retryResponse.data;
               }
 
-              // For now, use default AI mode without fetching settings to test
+              // Get saved chat mode settings from localStorage
+              let savedChatModes: Record<string, boolean> = {};
+              try {
+                const saved = localStorage.getItem('chatModeSettings');
+                if (saved) {
+                  savedChatModes = JSON.parse(saved);
+                }
+              } catch (error) {
+                console.warn('Failed to load chat mode settings from localStorage:', error);
+              }
+
+              // Update chats with saved AI mode settings, default to true if not saved
               const updatedChats = chats.map(chat => ({
                 ...chat,
-                aiMode: true // Default to AI mode for testing
+                aiMode: savedChatModes[chat.id] ?? true
               }));
 
               set({ chats: updatedChats, isLoading: false });
@@ -293,6 +355,9 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
             : chat
         );
 
+        console.log('Optimistic chat list update:', updatedChats.find(c => c.id === tempMessage.chatId));
+        console.log('Temp message content:', getMessageContentString(tempMessage));
+
         set({ chats: updatedChats, isSendingMessage: false });
       } catch (error) {
         // Remove optimistic message if send failed
@@ -358,6 +423,16 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
       try {
         await api.updateChatSettings(chatId, { aiMode: isAI });
 
+        // Save to localStorage for persistence
+        try {
+          const saved = localStorage.getItem('chatModeSettings');
+          const savedChatModes: Record<string, boolean> = saved ? JSON.parse(saved) : {};
+          savedChatModes[chatId] = isAI;
+          localStorage.setItem('chatModeSettings', JSON.stringify(savedChatModes));
+        } catch (error) {
+          console.warn('Failed to save chat mode settings to localStorage:', error);
+        }
+
         // Update the chat in the chats list
         const { chats, selectedChat } = get();
         const updatedChats = chats.map(chat =>
@@ -383,6 +458,41 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
       } catch (error) {
         console.error('Failed to get chat mode:', error);
         return true; // Default to AI mode on error
+      }
+    },
+
+    markMessagesAsRead: async (chatId: string) => {
+      try {
+        console.log('🔍 Attempting to mark messages as read for chat:', chatId);
+
+        const { chats, selectedChat } = get();
+        console.log('🔍 Current state - chats length:', chats.length, 'selectedChat:', selectedChat?.name);
+        console.log('🔍 Chat before update:', chats.find(c => c.id === chatId));
+
+        // Call API to mark as read
+        const response = await api.markMessagesAsRead(chatId);
+        console.log('🔍 API response:', response);
+
+        // Update local state to reflect read messages
+        const updatedChats = chats.map(chat =>
+          chat.id === chatId
+            ? { ...chat, unreadCount: 0 }
+            : chat
+        );
+
+        // Update selected chat if it matches
+        const updatedSelectedChat = selectedChat?.id === chatId
+          ? { ...selectedChat, unreadCount: 0 }
+          : selectedChat;
+
+        set({ chats: updatedChats, selectedChat: updatedSelectedChat });
+
+        console.log('✅ Messages marked as read for chat:', chatId);
+        console.log('🔍 Chat after update:', updatedChats.find(c => c.id === chatId));
+      } catch (error) {
+        console.error('❌ Failed to mark messages as read:', error);
+        console.log('🔍 Error details:', error.response?.data || error.message);
+        // Don't throw error to avoid breaking UX, just log it
       }
     },
   };

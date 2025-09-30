@@ -38,6 +38,7 @@ import { formatRelativeTime } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { Message } from '@/types/api';
 import { toast } from 'react-hot-toast';
+import { useWebSocket } from '@/lib/websocket';
 
 interface ChatListItemProps {
   chat: any;
@@ -231,11 +232,7 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}
-    >
+    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-2' : 'order-1'}`}>
         <div
           className={`p-3 rounded-lg ${
@@ -255,7 +252,7 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
           {getStatusIcon()}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -345,6 +342,13 @@ function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
 }
 
 export default function ChatsPage() {
+  // Simplified approach - use polling instead of WebSocket for now
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectionState, setConnectionState] = useState('disconnected');
+
+  // Debug WebSocket connection
+  console.log('App running - connection status:', isConnected, connectionState);
+
   const {
     chats,
     selectedChat,
@@ -356,6 +360,7 @@ export default function ChatsPage() {
     selectChat,
     sendMessage,
     fetchMessages,
+    markMessagesAsRead,
     clearError,
     updateChatMode
   } = useWhatsAppStore();
@@ -414,10 +419,61 @@ export default function ChatsPage() {
     }
   }, [selectedChat, fetchMessages, isFirstChatLoad]);
 
+  // Mark messages as read when chat is selected and has unread messages (with debouncing)
+  useEffect(() => {
+    if (selectedChat && selectedChat.unreadCount > 0) {
+      console.log('🎯 Triggering mark as read for chat:', selectedChat.id, 'Unread count:', selectedChat.unreadCount);
+      markMessagesAsRead(selectedChat.id);
+    } else if (selectedChat) {
+      // Only log this occasionally to reduce spam
+      if (Math.random() < 0.3) { // 30% chance to log
+        console.log('ℹ️ Chat selected but no unread messages:', selectedChat.id, 'Unread count:', selectedChat.unreadCount);
+      }
+    }
+  }, [selectedChat, markMessagesAsRead]);
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Optimized polling for new messages every 2 seconds (reduced frequency)
+  useEffect(() => {
+    console.log('⚙️ Setting up message polling (2s)...');
+    let lastMessageCount = messages.length;
+    let lastTimestamp = Date.now();
+
+    const pollInterval = setInterval(() => {
+      if (selectedChat) {
+        const now = Date.now();
+        // Only poll if it's been more than 1.5s since last poll (rate limiting)
+        if (now - lastTimestamp > 1500) {
+          // Only log occasionally to reduce spam
+          if (Math.random() < 0.1) { // 10% chance to log
+            console.log('🔄 Polling for new messages...');
+          }
+          fetchMessages(selectedChat.id);
+          lastTimestamp = now;
+        }
+      }
+    }, 2000); // Check every 2 seconds but only poll if 1.5s passed
+
+    return () => clearInterval(pollInterval);
+  }, [selectedChat, fetchMessages, messages.length]);
+
+  // Reduced polling for chat list updates every 5 seconds
+  useEffect(() => {
+    console.log('⚙️ Setting up chat list polling (5s)...');
+    const chatPollInterval = setInterval(() => {
+      // Only log occasionally to reduce spam
+      if (Math.random() < 0.2) { // 20% chance to log
+        console.log('🔄 Polling for chat list updates...');
+      }
+      fetchChats();
+    }, 5000); // Back to 5 seconds to reduce spam
+
+    return () => clearInterval(chatPollInterval);
+  }, [fetchChats]);
 
   // Set initialLoading to false when chats are loaded or when there's an error
   useEffect(() => {
@@ -508,7 +564,7 @@ export default function ChatsPage() {
       .toUpperCase();
   };
 
-  // Search messages within current chat
+  // Search messages within current chat (local search only)
   const searchMessagesInChat = (query: string) => {
     if (!query.trim() || !selectedChat) {
       setSearchResults([]);
@@ -517,31 +573,59 @@ export default function ChatsPage() {
     }
 
     setIsSearchingMessages(true);
-    const searchQuery = query.toLowerCase();
+    console.log('Searching for messages in chat:', selectedChat.id, 'query:', query);
 
-    const results = messages.filter(message => {
+    // Local search through loaded messages
+    const searchQuery = query.toLowerCase();
+    const localResults = messages.filter(message => {
       const content = getMessageContentString(message);
       return content.toLowerCase().includes(searchQuery);
     });
 
-    setSearchResults(results);
+    console.log('Local search results:', localResults);
+    console.log('Total messages searched:', messages.length);
+    console.log('Sample message content:', messages[0]?.content);
+
+    setSearchResults(localResults);
+    setIsSearchingMessages(false);
   };
 
   // Helper function to get message content as string for searching
   const getMessageContentString = (message: Message): string => {
+    console.log('Getting message content for:', message);
+
+    // WhatsApp Web.js messages have direct body property
+    if (message.body) return message.body;
+
+    // Check content object structure
     if (message.content?.body) return message.content.body;
     if (typeof message.content === 'string') return message.content;
     if (message.content?.text) return message.content.text;
     if (message.content?.caption) return message.content.caption;
     if (message.content?.description) return message.content.description;
-    return String(message.content || '');
+
+    // Fallback to content or empty string
+    return String(message.content || message.body || '');
   };
 
   // Handle message search input
   const handleMessageSearch = (query: string) => {
     setMessageSearchQuery(query);
-    searchMessagesInChat(query);
   };
+
+  // Debounced search effect
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      if (messageSearchQuery.trim() && selectedChat) {
+        searchMessagesInChat(messageSearchQuery);
+      } else if (!messageSearchQuery.trim()) {
+        setSearchResults([]);
+        setIsSearchingMessages(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  }, [messageSearchQuery, selectedChat, messages]); // Added messages dependency
 
   // Toggle message search interface
   const toggleMessageSearch = () => {
@@ -622,7 +706,7 @@ export default function ChatsPage() {
                 )}
 
                 {/* Pill Content */}
-                <div className={`relative z-10 flex items-center space-x-2 px-6 py-2 rounded-full ${
+                <div className={`relative z-10 flex items-center space-x-2 px-6 py-2 rounded-full min-w-fit ${
                   activeTab === 'ai' ? 'text-white' : 'text-gray-600 hover:text-gray-800'
                 } transition-colors duration-300`}>
                   <motion.div
@@ -632,18 +716,19 @@ export default function ChatsPage() {
                     }}
                     transition={{ duration: 0.6, type: "spring" }}
                   >
-                    <Bot className="w-4 h-4" />
+                    <Bot className="w-4 h-4 flex-shrink-0" />
                   </motion.div>
                   <motion.span
                     animate={{ fontWeight: activeTab === 'ai' ? 600 : 400 }}
-                    className="font-medium"
+                    className="font-medium whitespace-nowrap"
                   >
                     Bot AI
                   </motion.span>
                   <motion.div
                     animate={{ scale: activeTab === 'ai' ? 1.1 : 1 }}
+                    className="flex-shrink-0"
                   >
-                    <Badge className={`text-xs font-semibold ${
+                    <Badge className={`text-xs font-semibold min-w-[24px] h-5 flex items-center justify-center px-1.5 ${
                       activeTab === 'ai'
                         ? 'bg-white/30 text-white backdrop-blur-sm'
                         : 'bg-gray-200 text-gray-600'
@@ -676,7 +761,7 @@ export default function ChatsPage() {
                 )}
 
                 {/* Pill Content */}
-                <div className={`relative z-10 flex items-center space-x-2 px-6 py-2 rounded-full ${
+                <div className={`relative z-10 flex items-center space-x-2 px-6 py-2 rounded-full min-w-fit ${
                   activeTab === 'human' ? 'text-white' : 'text-gray-600 hover:text-gray-800'
                 } transition-colors duration-300`}>
                   <motion.div
@@ -686,18 +771,19 @@ export default function ChatsPage() {
                     }}
                     transition={{ duration: 0.6, type: "spring" }}
                   >
-                    <User className="w-4 h-4" />
+                    <User className="w-4 h-4 flex-shrink-0" />
                   </motion.div>
                   <motion.span
                     animate={{ fontWeight: activeTab === 'human' ? 600 : 400 }}
-                    className="font-medium"
+                    className="font-medium whitespace-nowrap"
                   >
                     Human Agent
                   </motion.span>
                   <motion.div
                     animate={{ scale: activeTab === 'human' ? 1.1 : 1 }}
+                    className="flex-shrink-0"
                   >
-                    <Badge className={`text-xs font-semibold ${
+                    <Badge className={`text-xs font-semibold min-w-[24px] h-5 flex items-center justify-center px-1.5 ${
                       activeTab === 'human'
                         ? 'bg-white/30 text-white backdrop-blur-sm'
                         : 'bg-gray-200 text-gray-600'
@@ -849,7 +935,12 @@ export default function ChatsPage() {
                 ) : (
                   <div className="space-y-1">
                     {(showMessageSearch && messageSearchQuery) ? (
-                      searchResults.length > 0 ? (
+                      isSearchingMessages ? (
+                        <div className="flex items-center justify-center h-full py-8">
+                          <LoadingSpinner size="md" />
+                          <p className="text-gray-500 text-sm ml-2">Searching...</p>
+                        </div>
+                      ) : searchResults.length > 0 ? (
                         searchResults.map((message) => (
                           <MessageBubble
                             key={message.id}

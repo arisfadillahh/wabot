@@ -156,6 +156,12 @@ class ApiClient {
     return this.request(`/api/messages/${chatId}?limit=${limit}`);
   }
 
+  async markMessagesAsRead(chatId: string) {
+    return this.request(`/api/messages/${chatId}/read`, {
+      method: 'POST'
+    });
+  }
+
   async searchMessages(query: string, chatId?: string, limit = 50) {
     const params = new URLSearchParams({ query, limit: limit.toString() });
     if (chatId) params.append('chatId', chatId);

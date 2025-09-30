@@ -1520,27 +1520,27 @@ app.get('/api/messages/:chatId', sessionAuthMiddleware, async (req, res) => {
     if (!clientReady) {
         return res.status(503).json({ error: 'WhatsApp client not ready' });
     }
-    
+
     const chatId = req.params.chatId;
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
-    
+
     if (!chatId || typeof chatId !== 'string') {
         return res.status(400).json({ error: 'Invalid chatId' });
     }
-    
+
     try {
         // Check cache first
         const cacheKey = `messages_${chatId}_${limit}`;
         const now = Date.now();
-        
+
         if (chatCache.has(cacheKey) && (now - chatCache.get(cacheKey + '_timestamp')) < 10000) { // 10 second cache for messages
             console.log(`📱 Returning cached messages for ${chatId}`);
             return res.json(chatCache.get(cacheKey));
         }
-        
+
         // Fetch fresh data from WhatsApp
         const messages = await getWhatsAppMessages(chatId, limit);
-        
+
         const result = {
             messages,
             pagination: {
@@ -1549,19 +1549,61 @@ app.get('/api/messages/:chatId', sessionAuthMiddleware, async (req, res) => {
                 hasMore: messages.length === limit
             }
         };
-        
+
         // Cache the result
         chatCache.set(cacheKey, result);
         chatCache.set(cacheKey + '_timestamp', now);
-        
+
         console.log(`📱 Loaded ${messages.length} messages from WhatsApp for chat ${chatId}`);
         res.json(result);
-        
+
     } catch (error) {
         console.error(`❌ Failed to load messages for chat ${chatId}:`, error);
-        res.status(500).json({ 
-            error: 'Failed to load messages from WhatsApp', 
-            details: error.message 
+        res.status(500).json({
+            error: 'Failed to load messages from WhatsApp',
+            details: error.message
+        });
+    }
+});
+
+// Mark messages as read
+app.post('/api/messages/:chatId/read', sessionAuthMiddleware, async (req, res) => {
+    if (!clientReady) {
+        return res.status(503).json({ error: 'WhatsApp client not ready' });
+    }
+
+    const chatId = req.params.chatId;
+
+    if (!chatId || typeof chatId !== 'string') {
+        return res.status(400).json({ error: 'Invalid chatId' });
+    }
+
+    try {
+        console.log(`🔍 Marking messages as read for chat: ${chatId}`);
+
+        // Get the chat and mark messages as read
+        const chat = await client.getChatById(chatId);
+
+        // Mark all messages as read in WhatsApp
+        await chat.sendSeen();
+
+        // Clear the chat cache to refresh unread counts
+        chatCache.clear();
+        lastChatRefresh = 0;
+
+        console.log(`✅ Messages marked as read for chat: ${chatId}`);
+
+        res.json({
+            success: true,
+            message: 'Messages marked as read successfully',
+            chatId: chatId
+        });
+
+    } catch (error) {
+        console.error(`❌ Failed to mark messages as read for chat ${chatId}:`, error);
+        res.status(500).json({
+            error: 'Failed to mark messages as read',
+            details: error.message
         });
     }
 });
@@ -1838,19 +1880,92 @@ app.post('/api/clear-cache', sessionAuthMiddleware, (req, res) => {
     res.json({ message: 'Cache cleared successfully' });
 });
 
+// Request QR code generation
+app.post('/api/request-qr', sessionAuthMiddleware, (req, res) => {
+    console.log('📱 Manual QR request received');
+
+    if (clientReady) {
+        return res.json({
+            success: false,
+            message: 'WhatsApp client is already ready'
+        });
+    }
+
+    if (!client) {
+        console.log('🔄 Reinitializing WhatsApp client for QR generation...');
+        initializeWhatsAppClient();
+        return res.json({
+            success: true,
+            message: 'WhatsApp client reinitialized for QR generation'
+        });
+    }
+
+    res.json({
+        success: true,
+        message: 'QR generation request received, client should be generating QR'
+    });
+});
+
 // Frontend now handled by Next.js (public directory reserved for Next.js static assets)
 
 // Socket.IO untuk dashboard real-time
 io.on('connection', (socket) => {
     console.log(`🔌 Dashboard client connected: ${socket.id}`);
-    
-    socket.emit('status', { 
+
+    socket.emit('status', {
         whatsappReady: clientReady,
         timestamp: new Date().toISOString(),
         cachedChats: chatCache.size,
         webhookQueueSize: webhookQueue.length
     });
-    
+
+    // Handle manual QR request
+    socket.on('request-qr', () => {
+        console.log('📱 QR request received via WebSocket from:', socket.id);
+
+        if (clientReady) {
+            socket.emit('qr-response', {
+                success: false,
+                message: 'WhatsApp client is already ready'
+            });
+            return;
+        }
+
+        if (!client) {
+            console.log('🔄 Reinitializing WhatsApp client for QR generation...');
+            initializeWhatsAppClient();
+            socket.emit('qr-response', {
+                success: true,
+                message: 'WhatsApp client reinitialized for QR generation'
+            });
+            return;
+        }
+
+        // If client exists but not ready, try to trigger QR generation
+        // by destroying and recreating the client
+        try {
+            if (client) {
+                client.destroy();
+                client = null;
+                clientReady = false;
+            }
+            console.log('🔄 Destroyed old client, reinitializing for QR...');
+            initializeWhatsAppClient();
+
+            socket.emit('qr-response', {
+                success: true,
+                message: 'Client destroyed and reinitialized for QR generation'
+            });
+        } catch (error) {
+            console.error('Error reinitializing client:', error);
+            socket.emit('qr-response', {
+                success: false,
+                message: 'Failed to reinitialize client',
+                error: error.message
+            });
+        }
+    });
+
     socket.on('disconnect', () => {
         console.log(`🔌 Dashboard client disconnected: ${socket.id}`);
     });
