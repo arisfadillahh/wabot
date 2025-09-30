@@ -502,32 +502,117 @@ export default function ChatsPage() {
             </div>
           </div>
 
-          {/* Category Tabs */}
-          <div className="flex space-x-1 p-2 bg-gray-50 dark:bg-gray-900">
-            <Button
-              variant={activeTab === 'ai' ? 'default' : 'ghost'}
-              size="sm"
-              className="flex items-center space-x-2 flex-1 justify-center text-green-600 hover:text-green-700"
-              onClick={() => setActiveTab('ai')}
-            >
-              <Bot className="w-4 h-4" />
-              <span>Bot AI</span>
-              <Badge variant="secondary" className="text-xs bg-white">
-                {getChatsCount('ai')}
-              </Badge>
-            </Button>
-            <Button
-              variant={activeTab === 'human' ? 'default' : 'ghost'}
-              size="sm"
-              className="flex items-center space-x-2 flex-1 justify-center text-blue-600 hover:text-blue-700"
-              onClick={() => setActiveTab('human')}
-            >
-              <User className="w-4 h-4" />
-              <span>Human Mode</span>
-              <Badge variant="secondary" className="text-xs bg-white">
-                {getChatsCount('human')}
-              </Badge>
-            </Button>
+          {/* Category Pills */}
+          <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex justify-center space-x-4">
+              {/* Bot AI Pill */}
+              <motion.div
+                className="relative cursor-pointer"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setActiveTab('ai')}
+              >
+                {/* Active Background */}
+                {activeTab === 'ai' && (
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-r from-green-400 to-green-500 rounded-full shadow-lg"
+                    layoutId="activePill"
+                    initial={false}
+                    transition={{
+                      type: "spring",
+                      stiffness: 300,
+                      damping: 30
+                    }}
+                  />
+                )}
+
+                {/* Pill Content */}
+                <div className={`relative z-10 flex items-center space-x-2 px-6 py-2 rounded-full ${
+                  activeTab === 'ai' ? 'text-white' : 'text-gray-600 hover:text-gray-800'
+                } transition-colors duration-300`}>
+                  <motion.div
+                    animate={{
+                      rotate: activeTab === 'ai' ? 360 : 0,
+                      scale: activeTab === 'ai' ? 1.2 : 1
+                    }}
+                    transition={{ duration: 0.6, type: "spring" }}
+                  >
+                    <Bot className="w-4 h-4" />
+                  </motion.div>
+                  <motion.span
+                    animate={{ fontWeight: activeTab === 'ai' ? 600 : 400 }}
+                    className="font-medium"
+                  >
+                    Bot AI
+                  </motion.span>
+                  <motion.div
+                    animate={{ scale: activeTab === 'ai' ? 1.1 : 1 }}
+                  >
+                    <Badge className={`text-xs font-semibold ${
+                      activeTab === 'ai'
+                        ? 'bg-white/30 text-white backdrop-blur-sm'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {getChatsCount('ai')}
+                    </Badge>
+                  </motion.div>
+                </div>
+              </motion.div>
+
+              {/* Human Agent Pill */}
+              <motion.div
+                className="relative cursor-pointer"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setActiveTab('human')}
+              >
+                {/* Active Background */}
+                {activeTab === 'human' && (
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-r from-blue-400 to-blue-500 rounded-full shadow-lg"
+                    layoutId="activePill"
+                    initial={false}
+                    transition={{
+                      type: "spring",
+                      stiffness: 300,
+                      damping: 30
+                    }}
+                  />
+                )}
+
+                {/* Pill Content */}
+                <div className={`relative z-10 flex items-center space-x-2 px-6 py-2 rounded-full ${
+                  activeTab === 'human' ? 'text-white' : 'text-gray-600 hover:text-gray-800'
+                } transition-colors duration-300`}>
+                  <motion.div
+                    animate={{
+                      rotate: activeTab === 'human' ? 360 : 0,
+                      scale: activeTab === 'human' ? 1.2 : 1
+                    }}
+                    transition={{ duration: 0.6, type: "spring" }}
+                  >
+                    <User className="w-4 h-4" />
+                  </motion.div>
+                  <motion.span
+                    animate={{ fontWeight: activeTab === 'human' ? 600 : 400 }}
+                    className="font-medium"
+                  >
+                    Human Agent
+                  </motion.span>
+                  <motion.div
+                    animate={{ scale: activeTab === 'human' ? 1.1 : 1 }}
+                  >
+                    <Badge className={`text-xs font-semibold ${
+                      activeTab === 'human'
+                        ? 'bg-white/30 text-white backdrop-blur-sm'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {getChatsCount('human')}
+                    </Badge>
+                  </motion.div>
+                </div>
+              </motion.div>
+            </div>
           </div>
 
           {/* Chat List */}

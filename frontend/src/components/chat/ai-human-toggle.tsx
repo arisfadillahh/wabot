@@ -32,12 +32,24 @@ export function AIHumanToggle({
   };
 
   return (
-    <div className={cn('relative', className)}>
+    <div className={cn('relative flex items-center space-x-2', className)}>
+      {/* Human Label */}
+      <motion.span
+        className={cn(
+          'text-xs font-medium transition-colors duration-200',
+          !isAIMode ? 'text-blue-600' : 'text-gray-400'
+        )}
+        animate={{ scale: !isAIMode ? 1 : 0.9 }}
+      >
+        Human
+      </motion.span>
+
+      {/* Toggle Button */}
       <motion.button
         onClick={handleToggle}
         disabled={disabled || isAnimating}
         className={cn(
-          'relative w-14 h-7 rounded-full p-1 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2',
+          'relative w-12 h-6 rounded-full p-0.5 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2',
           isAIMode
             ? 'bg-green-500 focus:ring-green-500'
             : 'bg-blue-500 focus:ring-blue-500',
@@ -60,7 +72,7 @@ export function AIHumanToggle({
         <motion.div
           className="relative w-5 h-5 bg-white rounded-full shadow-md flex items-center justify-center"
           animate={{
-            x: isAIMode ? 28 : 0,
+            x: isAIMode ? 0 : 24,
           }}
           transition={{
             type: "spring",
@@ -86,39 +98,18 @@ export function AIHumanToggle({
             </motion.div>
           </AnimatePresence>
         </motion.div>
-
-        {/* Status indicator dot */}
-        <motion.div
-          className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-white"
-          animate={{
-            opacity: isAIMode ? 1 : 0.3,
-            scale: isAIMode ? 1 : 0.8,
-          }}
-          transition={{ duration: 0.2 }}
-        />
       </motion.button>
 
-      {/* Labels */}
-      <div className="flex items-center justify-between mt-1 px-1">
-        <motion.span
-          className={cn(
-            'text-xs font-medium transition-colors duration-200',
-            isAIMode ? 'text-gray-400' : 'text-blue-600'
-          )}
-          animate={{ scale: isAIMode ? 0.9 : 1 }}
-        >
-          Human
-        </motion.span>
-        <motion.span
-          className={cn(
-            'text-xs font-medium transition-colors duration-200',
-            isAIMode ? 'text-green-600' : 'text-gray-400'
-          )}
-          animate={{ scale: isAIMode ? 1 : 0.9 }}
-        >
-          AI
-        </motion.span>
-      </div>
+      {/* AI Label */}
+      <motion.span
+        className={cn(
+          'text-xs font-medium transition-colors duration-200',
+          isAIMode ? 'text-green-600' : 'text-gray-400'
+        )}
+        animate={{ scale: isAIMode ? 1 : 0.9 }}
+      >
+        AI
+      </motion.span>
 
       {/* Loading overlay */}
       {isAnimating && (
@@ -157,7 +148,7 @@ export function AIHumanToggleWithTooltip({
 
       {/* Tooltip */}
       <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
-        {isAIMode ? 'Switch to Human mode' : 'Switch to AI mode'}
+        {isAIMode ? 'Switch to Human Agent' : 'Switch to Bot AI'}
         <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
       </div>
     </div>
