@@ -30,6 +30,16 @@ interface WhatsAppState {
   getChatMode: (chatId: string) => Promise<boolean>;
 }
 
+// Helper function to extract message content
+const getMessageContentString = (message: Message): string => {
+  if (message.content?.body) return message.content.body;
+  if (typeof message.content === 'string') return message.content;
+  if (message.content?.text) return message.content.text;
+  if (message.content?.caption) return message.content.caption;
+  if (message.content?.description) return message.content.description;
+  return String(message.content || '');
+};
+
 export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
   // Setup WebSocket event listeners
   const setupWebSocketListeners = () => {
@@ -45,10 +55,20 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
       // Update chat list with new message
       const updatedChats = state.chats.map(chat =>
         chat.id === data.chatId
-          ? { ...chat, lastMessage: data.message, timestamp: data.message.timestamp, unreadCount: data.fromMe ? chat.unreadCount : chat.unreadCount + 1 }
+          ? {
+              ...chat,
+              lastMessage: {
+                ...data.message,
+                content: getMessageContentString(data.message)
+              },
+              timestamp: data.message.timestamp,
+              unreadCount: data.fromMe ? chat.unreadCount : chat.unreadCount + 1
+            }
           : chat
       );
-      set({ chats: updatedChats });
+
+      // Update chats without triggering loading animation
+      set({ chats: updatedChats, isLoading: false });
     });
 
     // Message status update
@@ -66,7 +86,9 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
       const updatedChats = state.chats.map(chat =>
         chat.id === data.chat.id ? { ...chat, ...data.chat } : chat
       );
-      set({ chats: updatedChats });
+
+      // Update chats without triggering loading animation
+      set({ chats: updatedChats, isLoading: false });
 
       // Update selected chat if it matches
       if (state.selectedChat && state.selectedChat.id === data.chat.id) {
@@ -133,6 +155,8 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
           chats = response.chats;
         } else if (Array.isArray(response)) {
           chats = response;
+        } else if (response.success && response.data && Array.isArray(response.data)) {
+          chats = response.data;
         }
 
         console.log('Extracted chats:', chats.length, 'chats');
@@ -147,6 +171,47 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
         set({ chats: updatedChats, isLoading: false });
       } catch (error) {
         console.error('Error fetching chats:', error);
+
+        // Try auto-login with API key if session expired
+        if (error instanceof Error && (error.message.includes('Invalid session') || error.message.includes('HTTP 403'))) {
+          try {
+            console.log('Session expired, clearing and trying auto-login...');
+            // Clear expired session
+            Cookies.remove('_session');
+            localStorage.removeItem('sessionToken');
+
+            const apiKey = Cookies.get('apiKey');
+            if (apiKey) {
+              await api.login(apiKey);
+              // Retry fetching chats after login
+              const retryResponse = await api.getChats() as any;
+
+              // Check response structure
+              let chats = [];
+              if (retryResponse.data && retryResponse.data.chats) {
+                chats = retryResponse.data.chats;
+              } else if (retryResponse.chats) {
+                chats = retryResponse.chats;
+              } else if (Array.isArray(retryResponse)) {
+                chats = retryResponse;
+              } else if (retryResponse.success && retryResponse.data && Array.isArray(retryResponse.data)) {
+                chats = retryResponse.data;
+              }
+
+              // For now, use default AI mode without fetching settings to test
+              const updatedChats = chats.map(chat => ({
+                ...chat,
+                aiMode: true // Default to AI mode for testing
+              }));
+
+              set({ chats: updatedChats, isLoading: false });
+              return;
+            }
+          } catch (loginError) {
+            console.error('Auto-login failed:', loginError);
+          }
+        }
+
         set({
           error: error instanceof Error ? error.message : 'Failed to fetch chats',
           isLoading: false,
@@ -192,9 +257,56 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
       set({ isSendingMessage: true, error: null });
 
       try {
+        // Check if we're in AI mode first
+        const state = get();
+        if (state.selectedChat && state.selectedChat.aiMode) {
+          throw new Error('Cannot send messages in AI mode. Switch to Human mode to send messages.');
+        }
+
         await api.sendMessage(to, message);
-        set({ isSendingMessage: false });
+
+        // Optimistic update - add message to UI immediately
+        const tempMessage: Message = {
+          id: `temp-${Date.now()}`,
+          chatId: state.selectedChat?.id || to,
+          content: message,
+          type: 'text',
+          fromMe: true,
+          timestamp: new Date().toISOString(),
+          status: 'sent'
+        };
+
+        set({ messages: [...state.messages, tempMessage] });
+
+        // Optimistic update for chat list
+        const updatedChats = state.chats.map(chat =>
+          chat.id === tempMessage.chatId
+            ? {
+                ...chat,
+                lastMessage: {
+                  ...tempMessage,
+                  content: getMessageContentString(tempMessage)
+                },
+                timestamp: tempMessage.timestamp,
+                unreadCount: tempMessage.fromMe ? chat.unreadCount : chat.unreadCount + 1
+              }
+            : chat
+        );
+
+        set({ chats: updatedChats, isSendingMessage: false });
       } catch (error) {
+        // Remove optimistic message if send failed
+        const currentState = get();
+        const updatedMessages = currentState.messages.filter(msg => !msg.id.startsWith('temp-'));
+
+        // Also revert chat list optimistic update
+        const revertedChats = currentState.chats.map(chat =>
+          chat.lastMessage?.id?.startsWith('temp-')
+            ? { ...chat, lastMessage: chat.lastMessage.id.startsWith('temp-') ? null : chat.lastMessage }
+            : chat
+        );
+
+        set({ messages: updatedMessages, chats: revertedChats });
         set({
           error: error instanceof Error ? error.message : 'Failed to send message',
           isSendingMessage: false,

@@ -138,7 +138,7 @@ class ApiClient {
   }
 
   async sendMessage(to: string, message: string) {
-    return this.request('/whatsapp/send', {
+    return this.request('/send', {
       method: 'POST',
       body: JSON.stringify({ to, message }),
     });

@@ -72,7 +72,7 @@ export function AIHumanToggle({
         <motion.div
           className="relative w-5 h-5 bg-white rounded-full shadow-md flex items-center justify-center"
           animate={{
-            x: isAIMode ? 0 : 24,
+            x: isAIMode ? 24 : 0,
           }}
           transition={{
             type: "spring",

@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import Cookies from 'js-cookie';
+import { api } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -363,13 +365,35 @@ export default function ChatsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'ai' | 'human'>('ai');
   const [messageInput, setMessageInput] = useState('');
+  const [initialLoading, setInitialLoading] = useState(true);
   const [localAIMode, setLocalAIMode] = useState(true);
   const [isUpdatingMode, setIsUpdatingMode] = useState(false);
+  const [isFirstChatLoad, setIsFirstChatLoad] = useState(true);
+  const [messageSearchQuery, setMessageSearchQuery] = useState('');
+  const [isSearchingMessages, setIsSearchingMessages] = useState(false);
+  const [searchResults, setSearchResults] = useState<Message[]>([]);
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     console.log('Chats page mounted, fetching chats...');
-    fetchChats();
+
+    // Auto-login if no session but API key exists
+    const sessionToken = Cookies.get('_session');
+    const apiKey = Cookies.get('apiKey');
+
+    if (!sessionToken && apiKey) {
+      console.log('No session found, auto-login with API key...');
+      api.login(apiKey).then(() => {
+        fetchChats();
+      }).catch(error => {
+        console.error('Auto-login failed:', error);
+        fetchChats(); // Try anyway
+      });
+    } else {
+      fetchChats();
+    }
   }, [fetchChats]);
 
   // Sync AI mode when chat changes
@@ -383,14 +407,24 @@ export default function ChatsPage() {
   useEffect(() => {
     if (selectedChat) {
       console.log('Selected chat changed, fetching messages for:', selectedChat.id);
+      if (isFirstChatLoad) {
+        setIsFirstChatLoad(false);
+      }
       fetchMessages(selectedChat.id);
     }
-  }, [selectedChat, fetchMessages]);
+  }, [selectedChat, fetchMessages, isFirstChatLoad]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Set initialLoading to false when chats are loaded or when there's an error
+  useEffect(() => {
+    if ((chats.length > 0 && !isLoading && initialLoading) || (error && initialLoading)) {
+      setInitialLoading(false);
+    }
+  }, [chats, isLoading, error, initialLoading]);
 
   const filteredChats = chats.filter(chat => {
     const matchesSearch = chat.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -403,18 +437,28 @@ export default function ChatsPage() {
   });
 
   const getChatsCount = (tab: 'ai' | 'human') => {
-    if (tab === 'ai') return chats.filter(chat => chat.aiMode ?? true).length;
-    if (tab === 'human') return chats.filter(chat => !(chat.aiMode ?? true)).length;
+    if (tab === 'ai') {
+      const aiChats = chats.filter(chat => chat.aiMode ?? true);
+      return aiChats.reduce((total, chat) => total + (chat.unreadCount || 0), 0);
+    }
+    if (tab === 'human') {
+      const humanChats = chats.filter(chat => !(chat.aiMode ?? true));
+      return humanChats.reduce((total, chat) => total + (chat.unreadCount || 0), 0);
+    }
     return 0;
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageInput.trim() || !selectedChat || isSendingMessage) return;
+    if (!messageInput.trim() || !selectedChat || isSendingMessage || localAIMode) return;
 
     try {
       await sendMessage(selectedChat.id, messageInput.trim());
       setMessageInput('');
+      // Keep focus on message input after sending
+      setTimeout(() => {
+        messageInputRef.current?.focus();
+      }, 0);
     } catch (error) {
       console.error('Failed to send message:', error);
     }
@@ -427,6 +471,11 @@ export default function ChatsPage() {
     try {
       await updateChatMode(selectedChat.id, isAI);
       setLocalAIMode(isAI);
+
+      // Auto-switch to human tab when toggling to human mode
+      if (!isAI && activeTab !== 'human') {
+        setActiveTab('human');
+      }
 
       // Show toast notification
       toast.success(`Switched to ${isAI ? 'AI' : 'Human'} mode`, {
@@ -457,6 +506,52 @@ export default function ChatsPage() {
       .join('')
       .substring(0, 2)
       .toUpperCase();
+  };
+
+  // Search messages within current chat
+  const searchMessagesInChat = (query: string) => {
+    if (!query.trim() || !selectedChat) {
+      setSearchResults([]);
+      setIsSearchingMessages(false);
+      return;
+    }
+
+    setIsSearchingMessages(true);
+    const searchQuery = query.toLowerCase();
+
+    const results = messages.filter(message => {
+      const content = getMessageContentString(message);
+      return content.toLowerCase().includes(searchQuery);
+    });
+
+    setSearchResults(results);
+  };
+
+  // Helper function to get message content as string for searching
+  const getMessageContentString = (message: Message): string => {
+    if (message.content?.body) return message.content.body;
+    if (typeof message.content === 'string') return message.content;
+    if (message.content?.text) return message.content.text;
+    if (message.content?.caption) return message.content.caption;
+    if (message.content?.description) return message.content.description;
+    return String(message.content || '');
+  };
+
+  // Handle message search input
+  const handleMessageSearch = (query: string) => {
+    setMessageSearchQuery(query);
+    searchMessagesInChat(query);
+  };
+
+  // Toggle message search interface
+  const toggleMessageSearch = () => {
+    setShowMessageSearch(!showMessageSearch);
+    if (!showMessageSearch) {
+      // Clear search when opening
+      setMessageSearchQuery('');
+      setSearchResults([]);
+      setIsSearchingMessages(false);
+    }
   };
 
   console.log('Rendering ChatsPage with', chats.length, 'chats', 'selectedChat:', selectedChat?.name, 'messages:', messages.length);
@@ -631,7 +726,7 @@ export default function ChatsPage() {
               </div>
             )}
 
-            {isLoading ? (
+            {initialLoading ? (
               <div className="flex items-center justify-center py-8">
                 <LoadingSpinner size="lg" />
               </div>
@@ -687,13 +782,7 @@ export default function ChatsPage() {
                       disabled={isUpdatingMode}
                     />
 
-                    <Button variant="ghost" size="sm">
-                      <Phone className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm">
-                      <Video className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" onClick={toggleMessageSearch}>
                       <Search className="w-4 h-4" />
                     </Button>
                     <Button variant="ghost" size="sm">
@@ -702,6 +791,40 @@ export default function ChatsPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Message Search Interface */}
+              {showMessageSearch && (
+                <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <div className="flex items-center space-x-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        value={messageSearchQuery}
+                        onChange={(e) => handleMessageSearch(e.target.value)}
+                        placeholder="Search messages in this chat..."
+                        className="pl-10 bg-gray-100 dark:bg-gray-700 border-0"
+                        autoFocus
+                      />
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={toggleMessageSearch}>
+                      ×
+                    </Button>
+                  </div>
+
+                  {/* Search Results Info */}
+                  {messageSearchQuery && (
+                    <div className="mt-2 text-sm text-gray-500">
+                      {isSearchingMessages ? (
+                        <span>Searching...</span>
+                      ) : searchResults.length > 0 ? (
+                        <span>Found {searchResults.length} message{searchResults.length !== 1 ? 's' : ''}</span>
+                      ) : (
+                        <span>No messages found</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Messages Container */}
               <div className="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900">
@@ -719,19 +842,37 @@ export default function ChatsPage() {
                   </div>
                 )}
 
-                {isLoading && messages.length === 0 ? (
+                {isLoading && messages.length === 0 && isFirstChatLoad ? (
                   <div className="flex items-center justify-center h-full">
                     <LoadingSpinner size="lg" />
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    {messages.map((message) => (
-                      <MessageBubble
-                        key={message.id}
-                        message={message}
-                        isOwn={message.fromMe}
-                      />
-                    ))}
+                    {(showMessageSearch && messageSearchQuery) ? (
+                      searchResults.length > 0 ? (
+                        searchResults.map((message) => (
+                          <MessageBubble
+                            key={message.id}
+                            message={message}
+                            isOwn={message.fromMe}
+                          />
+                        ))
+                      ) : (
+                        <div className="flex items-center justify-center h-full py-8">
+                          <p className="text-gray-500 text-sm">
+                            {messageSearchQuery ? 'No messages found matching your search.' : 'Type to search messages in this chat.'}
+                          </p>
+                        </div>
+                      )
+                    ) : (
+                      messages.map((message) => (
+                        <MessageBubble
+                          key={message.id}
+                          message={message}
+                          isOwn={message.fromMe}
+                        />
+                      ))
+                    )}
                     <div ref={messagesEndRef} />
                   </div>
                 )}
@@ -747,16 +888,17 @@ export default function ChatsPage() {
                     <Smile className="w-4 h-4" />
                   </Button>
                   <Input
+                    ref={messageInputRef}
                     value={messageInput}
                     onChange={(e) => setMessageInput(e.target.value)}
-                    placeholder="Type a message..."
+                    placeholder={localAIMode ? "AI mode - Cannot send messages" : "Type a message..."}
                     className="flex-1 bg-gray-100 dark:bg-gray-700 border-0"
-                    disabled={isSendingMessage}
+                    disabled={isSendingMessage || localAIMode}
                   />
                   <Button
                     type="submit"
-                    disabled={!messageInput.trim() || isSendingMessage}
-                    className="bg-green-500 hover:bg-green-600 text-white"
+                    disabled={!messageInput.trim() || isSendingMessage || localAIMode}
+                    className="bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSendingMessage ? (
                       <LoadingSpinner size="sm" />
