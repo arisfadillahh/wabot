@@ -33,6 +33,8 @@ interface DashboardStats {
   messagesReceived: number;
   failedMessages: number;
   unreadMessages: number;
+  aiMessages: number;
+  humanMessages: number;
   connectionStatus: 'connected' | 'disconnected' | 'connecting';
   lastActivity: string;
   messageTrend: 'up' | 'down' | 'neutral';
@@ -58,32 +60,34 @@ export default function DashboardPage() {
   const fetchDashboardData = async () => {
     try {
       setIsLoading(true);
-      const response = await api.getDashboardData(7);
 
-      const dashboard = (response as any).data.dashboard;
+      // Use the same working analytics API endpoint
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const response = await fetch(`${API_BASE}/api/test/analytics/overview?days=7`);
+      const data = await response.json();
 
-      setStats({
-        totalMessages: dashboard.overview.totalMessages,
-        totalContacts: dashboard.overview.totalContacts,
-        messagesSent: dashboard.overview.messagesSent,
-        messagesReceived: dashboard.overview.messagesReceived,
-        failedMessages: dashboard.overview.failedMessages,
-        unreadMessages: dashboard.overview.unreadMessages,
-        connectionStatus: dashboard.connectionStatus,
-        lastActivity: dashboard.lastActivity,
-        messageTrend: dashboard.overview.messageTrend,
-        contactTrend: dashboard.overview.contactTrend,
-      });
+      if (data.success) {
+        const overview = data.data;
 
-      const formattedActivityData = dashboard.dailyActivity.map((item: any) => ({
-        date: new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        sent: item.sent,
-        received: item.received,
-        failed: item.failed,
-      }));
+        setStats({
+          totalMessages: overview.totalMessages || 0,
+          totalContacts: overview.totalChats || 0,
+          messagesSent: overview.outgoingMessages || 0,
+          messagesReceived: overview.incomingMessages || 0,
+          failedMessages: 0, // WhatsApp doesn't track failed messages the same way
+          unreadMessages: 0, // TODO: Implement unread message tracking
+          aiMessages: overview.aiProcessed || 0,
+          humanMessages: overview.humanProcessed || 0,
+          connectionStatus: 'connected', // TODO: Get actual connection status
+          lastActivity: new Date().toISOString(),
+          messageTrend: overview.totalMessages > 0 ? 'up' : 'neutral',
+          contactTrend: overview.totalChats > 0 ? 'up' : 'neutral',
+        });
 
-      setActivityData(formattedActivityData);
-      setLastUpdated(new Date());
+        // Empty activity data for now since we don't have trends
+        setActivityData([]);
+        setLastUpdated(new Date());
+      }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
       // Don't show error to user, just use default stats
@@ -103,14 +107,15 @@ export default function DashboardPage() {
       setIsLoading(false);
     }
 
-    // Remove auto-refresh to prevent repeated errors
-    // const interval = setInterval(() => {
-    //   fetchStatus();
-    //   if (status?.isReady) {
-    //     fetchDashboardData();
-    //   }
-    // }, 30000);
-    // return () => clearInterval(interval);
+    // Auto-refresh untuk real-time dashboard updates
+    const interval = setInterval(() => {
+      fetchStatus();
+      if (status?.isReady) {
+        fetchDashboardData();
+      }
+    }, 5000); // Refresh setiap 5 detik
+
+    return () => clearInterval(interval);
   }, [fetchStatus, status?.isReady]);
 
   const getConnectionStatus = () => {
@@ -163,6 +168,8 @@ export default function DashboardPage() {
       messagesReceived: 0,
       failedMessages: 0,
       unreadMessages: 0,
+      aiMessages: 0,
+      humanMessages: 0,
       connectionStatus: 'disconnected',
       lastActivity: new Date().toISOString(),
       messageTrend: 'neutral',
@@ -195,7 +202,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
           <StatsCard
             title="Total Messages"
             value={defaultStats.totalMessages.toLocaleString()}
@@ -217,6 +224,18 @@ export default function DashboardPage() {
             value={defaultStats.messagesSent.toLocaleString()}
             description="Messages sent today"
             icon={<Send className="w-5 h-5 text-purple-600" />}
+          />
+          <StatsCard
+            title="AI Handled"
+            value={defaultStats.aiMessages.toLocaleString()}
+            description="AI processed messages"
+            icon={<TrendingUp className="w-5 h-5 text-indigo-600" />}
+          />
+          <StatsCard
+            title="Human Handled"
+            value={defaultStats.humanMessages.toLocaleString()}
+            description="Human processed messages"
+            icon={<Users className="w-5 h-5 text-teal-600" />}
           />
           <StatsCard
             title="Unread Messages"
@@ -276,7 +295,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
         <StatsCard
           title="Total Messages"
           value={stats.totalMessages.toLocaleString()}
@@ -298,6 +317,18 @@ export default function DashboardPage() {
           value={stats.messagesSent.toLocaleString()}
           description="Messages sent today"
           icon={<Send className="w-5 h-5 text-purple-600" />}
+        />
+        <StatsCard
+          title="AI Handled"
+          value={stats.aiMessages.toLocaleString()}
+          description="AI processed messages"
+          icon={<TrendingUp className="w-5 h-5 text-indigo-600" />}
+        />
+        <StatsCard
+          title="Human Handled"
+          value={stats.humanMessages.toLocaleString()}
+          description="Human processed messages"
+          icon={<Users className="w-5 h-5 text-teal-600" />}
         />
         <StatsCard
           title="Unread Messages"

@@ -198,6 +198,32 @@ class AnalyticsController {
   };
 
   /**
+   * Get peak hours analysis
+   */
+  getPeakHours = async (req, res) => {
+    try {
+      const { days = 7 } = req.query;
+      const validatedDays = Math.min(Math.max(parseInt(days), 1), 90);
+
+      logger.analytics('peak_hours_request', {
+        days: validatedDays,
+        ip: req.ip,
+        userId: req.user?.id
+      });
+
+      const peakHours = await this.analyticsModel.getPeakHours(validatedDays);
+
+      res.json({
+        peakHours,
+        filters: { days: validatedDays },
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      this.errorHandler.handle(error, req, res);
+    }
+  };
+
+  /**
    * Get webhook performance metrics
    */
   getWebhookMetrics = async (req, res) => {

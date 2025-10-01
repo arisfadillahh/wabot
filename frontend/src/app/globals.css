@@ -79,11 +79,15 @@
   }
 
   .message-bubble-sent {
-    @apply bg-whatsapp-600 text-white rounded-2xl rounded-tr-sm px-4 py-2 max-w-xs lg:max-w-md;
+    @apply bg-whatsapp-600 text-white rounded-2xl rounded-tr-sm px-4 py-2;
+    width: fit-content !important;
+    max-width: 28rem !important;
   }
 
   .message-bubble-received {
-    @apply bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-2xl rounded-tl-sm px-4 py-2 max-w-xs lg:max-w-md;
+    @apply bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-2xl rounded-tl-sm px-4 py-2;
+    width: fit-content !important;
+    max-width: 28rem !important;
   }
 
   .chat-input {

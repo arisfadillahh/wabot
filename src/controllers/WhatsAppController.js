@@ -575,6 +575,34 @@ class WhatsAppController {
       this.errorHandler.handle(error, req, res);
     }
   };
+
+  /**
+   * Get detailed message statistics with human/AI breakdown
+   */
+  getDetailedMessageStats = async (req, res) => {
+    try {
+      const { chatId, days = 30 } = req.query;
+
+      logger.whatsapp('get_detailed_message_stats_request', {
+        chatId,
+        days,
+        ip: req.ip
+      });
+
+      const stats = await this.whatsappService.getDetailedMessageStats(chatId, parseInt(days));
+
+      res.json({
+        stats,
+        filters: {
+          chatId,
+          days: parseInt(days)
+        },
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      this.errorHandler.handle(error, req, res);
+    }
+  };
 }
 
 module.exports = new WhatsAppController();

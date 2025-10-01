@@ -17,6 +17,8 @@ class Message {
         senderId,
         body,
         type = 'chat',
+        direction = null,
+        senderType = null,
         timestamp,
         fromMe = false,
         hasMedia = false,
@@ -26,14 +28,19 @@ class Message {
         isAiGenerated = false
       } = messageData;
 
+      // Determine direction and sender_type from existing fields if not provided
+      const messageDirection = direction !== null ? direction : (fromMe ? 'outgoing' : 'incoming');
+      const messageSenderType = senderType !== null ? senderType :
+        (fromMe ? (isAiGenerated ? 'ai' : 'human') : 'customer');
+
       const result = await db.run(
         `INSERT OR IGNORE INTO ${this.tableName} (
-          message_id, chat_id, sender_id, body, type, timestamp, from_me,
-          has_media, media_type, media_size, ack, is_ai_generated
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          message_id, chat_id, sender_id, body, type, direction, sender_type,
+          timestamp, from_me, has_media, media_type, media_size, ack, is_ai_generated
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          messageId, chatId, senderId, body, type, timestamp, fromMe,
-          hasMedia, mediaType, mediaSize, ack, isAiGenerated
+          messageId, chatId, senderId, body, type, messageDirection, messageSenderType,
+          timestamp, fromMe, hasMedia, mediaType, mediaSize, ack, isAiGenerated
         ]
       );
 
@@ -66,6 +73,8 @@ class Message {
           sender_id as senderId,
           body,
           type,
+          direction,
+          sender_type as senderType,
           timestamp,
           from_me as fromMe,
           has_media as hasMedia,
@@ -106,6 +115,8 @@ class Message {
           sender_id as senderId,
           body,
           type,
+          direction,
+          sender_type as senderType,
           timestamp,
           from_me as fromMe,
           has_media as hasMedia,
@@ -187,7 +198,7 @@ class Message {
   }
 
   /**
-   * Get message statistics
+   * Get message statistics with human/AI breakdown
    */
   async getStats(chatId = null, days = 30) {
     try {
@@ -202,7 +213,8 @@ class Message {
           COUNT(CASE WHEN from_me = 0 THEN 1 END) as receivedMessages,
           COUNT(CASE WHEN has_media = 1 THEN 1 END) as mediaMessages,
           COUNT(CASE WHEN is_ai_generated = 1 THEN 1 END) as aiMessages,
-          COUNT(CASE WHEN is_ai_generated = 0 THEN 1 END) as humanMessages,
+          COUNT(CASE WHEN is_ai_generated = 0 AND from_me = 1 THEN 1 END) as humanSentMessages,
+          COUNT(CASE WHEN is_ai_generated = 0 AND from_me = 1 THEN 1 END) as humanReplies,
           MIN(timestamp) as earliestMessage,
           MAX(timestamp) as latestMessage,
           AVG(timestamp - LAG(timestamp) OVER (ORDER BY timestamp)) as avgResponseTime
@@ -225,13 +237,62 @@ class Message {
         receivedMessages: stats.receivedMessages || 0,
         mediaMessages: stats.mediaMessages || 0,
         aiMessages: stats.aiMessages || 0,
-        humanMessages: stats.humanMessages || 0,
+        humanSentMessages: stats.humanSentMessages || 0,
+        humanReplies: stats.humanReplies || 0,
         earliestMessage: stats.earliestMessage || null,
         latestMessage: stats.latestMessage || null,
         avgResponseTime: stats.avgResponseTime || 0
       };
     } catch (error) {
       logger.error('Failed to get message statistics', { error: error.message, chatId, days });
+      throw error;
+    }
+  }
+
+  /**
+   * Get message statistics with detailed breakdown
+   */
+  async getDetailedStats(chatId = null, days = 30) {
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      startDate.setHours(0, 0, 0, 0);
+
+      let query = `
+        SELECT
+          COUNT(*) as totalMessages,
+          COUNT(CASE WHEN from_me = 0 THEN 1 END) as incomingMessages,
+          COUNT(CASE WHEN from_me = 1 AND is_ai_generated = 1 THEN 1 END) as aiReplies,
+          COUNT(CASE WHEN from_me = 1 AND is_ai_generated = 0 THEN 1 END) as humanReplies,
+          COUNT(CASE WHEN from_me = 1 AND is_ai_generated = 0 THEN 1 END) as dashboardReplies,
+          COUNT(CASE WHEN from_me = 1 AND is_ai_generated = 1 THEN 1 END) as n8nReplies,
+          MIN(timestamp) as earliestMessage,
+          MAX(timestamp) as latestMessage
+        FROM ${this.tableName}
+        WHERE timestamp >= ?
+      `;
+
+      const params = [startDate.getTime()];
+
+      if (chatId) {
+        query += ' AND chat_id = ?';
+        params.push(chatId);
+      }
+
+      const stats = await db.get(query, params);
+
+      return {
+        totalMessages: stats.totalMessages || 0,
+        incomingMessages: stats.incomingMessages || 0,
+        aiReplies: stats.aiReplies || 0,
+        humanReplies: stats.humanReplies || 0,
+        dashboardReplies: stats.dashboardReplies || 0,
+        n8nReplies: stats.n8nReplies || 0,
+        earliestMessage: stats.earliestMessage || null,
+        latestMessage: stats.latestMessage || null
+      };
+    } catch (error) {
+      logger.error('Failed to get detailed message statistics', { error: error.message, chatId, days });
       throw error;
     }
   }

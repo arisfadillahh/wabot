@@ -111,6 +111,8 @@ class DatabaseManager extends EventEmitter {
           sender_id TEXT NOT NULL,
           body TEXT,
           type TEXT DEFAULT 'chat',
+          direction TEXT NOT NULL DEFAULT 'incoming',
+          sender_type TEXT DEFAULT 'customer',
           timestamp INTEGER NOT NULL,
           from_me BOOLEAN DEFAULT FALSE,
           has_media BOOLEAN DEFAULT FALSE,
@@ -152,7 +154,11 @@ class DatabaseManager extends EventEmitter {
       'CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)',
       'CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id)',
       'CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)',
-      'CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id)'
+      'CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id)',
+      'CREATE INDEX IF NOT EXISTS idx_messages_direction ON messages(direction)',
+      'CREATE INDEX IF NOT EXISTS idx_messages_sender_type ON messages(sender_type)',
+      'CREATE INDEX IF NOT EXISTS idx_messages_chat_direction ON messages(chat_id, direction)',
+      'CREATE INDEX IF NOT EXISTS idx_messages_timestamp_direction ON messages(timestamp, direction)'
     ];
 
     for (const index of indexes) {

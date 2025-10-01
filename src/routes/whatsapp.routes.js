@@ -104,6 +104,10 @@ router.get('/stats',
   WhatsAppController.getMessageStats
 );
 
+router.get('/stats/detailed',
+  WhatsAppController.getDetailedMessageStats
+);
+
 router.get('/stats/type-distribution',
   WhatsAppController.getMessageTypeDistribution
 );

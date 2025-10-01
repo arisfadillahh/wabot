@@ -55,15 +55,28 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
     }
   };
 
+  // Extract message content
+  const getMessageContent = () => {
+    if (message.type === 'text') {
+      return typeof message.content === 'string'
+        ? message.content
+        : message.content?.text || message.content?.caption || message.content?.body || String(message.content || '');
+    }
+    return '';
+  };
+
+  const messageContent = getMessageContent();
+
+  
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}
     >
-      <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-2' : 'order-1'}`}>
+      <div className={`inline-block max-w-md ${isOwn ? 'order-2' : 'order-1'}`}>
         <div
-          className={`p-3 rounded-lg ${
+          className={`px-3 py-2 rounded-lg ${
             isOwn
               ? 'bg-[#128C7E] text-white' // WhatsApp dark green for sent messages
               : 'bg-gray-200 text-gray-900 border border-gray-300' // Darker gray for received messages
@@ -71,9 +84,7 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
         >
           {message.type === 'text' ? (
             <p className="text-sm">
-              {typeof message.content === 'string'
-                ? message.content
-                : message.content?.text || message.content?.caption || message.content?.body || String(message.content || '')}
+              {messageContent}
             </p>
           ) : (
             <div className="flex flex-col">

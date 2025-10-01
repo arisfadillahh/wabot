@@ -60,6 +60,11 @@ router.get('/hourly-patterns',
   AnalyticsController.getHourlyPatterns
 );
 
+router.get('/peak-hours',
+  apiRateLimiter,
+  AnalyticsController.getPeakHours
+);
+
 // Webhook analytics
 router.get('/webhook-metrics',
   apiRateLimiter,

@@ -7,7 +7,33 @@ class Analytics {
   }
 
   /**
-   * Log analytics event
+   * Log message event with proper direction and type
+   */
+  async logMessage(chatId, direction, senderType, data = null) {
+    try {
+      const result = await db.run(
+        `INSERT INTO ${this.tableName} (type, chat_id, is_ai, timestamp, data) VALUES (?, ?, ?, ?, ?)`,
+        ['message', chatId, senderType === 'ai' ? 1 : 0, Date.now(), data ? JSON.stringify(data) : null]
+      );
+
+      logger.analytics('message_logged', {
+        type: 'message',
+        chatId,
+        direction,
+        senderType,
+        timestamp: Date.now(),
+        data: data ? JSON.stringify(data).substring(0, 100) + '...' : null
+      });
+
+      return result;
+    } catch (error) {
+      logger.error('Failed to log message analytics', { error: error.message, chatId, direction, senderType });
+      throw error;
+    }
+  }
+
+  /**
+   * Log analytics event (legacy method for compatibility)
    */
   async log(type, chatId, isAi = false, data = null) {
     try {
@@ -32,29 +58,35 @@ class Analytics {
   }
 
   /**
-   * Get analytics summary
+   * Get analytics summary from actual messages
    */
   async getSummary() {
     try {
-      const summary = await db.get(`
+      // Get message statistics from the messages table
+      const messageStats = await db.get(`
         SELECT
           COUNT(DISTINCT chat_id) as totalChats,
-          COUNT(*) as totalEvents,
-          COUNT(CASE WHEN type = 'message' THEN 1 END) as totalMessages,
-          COUNT(CASE WHEN type = 'message' AND is_ai = 1 THEN 1 END) as aiProcessed,
-          COUNT(CASE WHEN type = 'message' AND is_ai = 0 THEN 1 END) as humanProcessed,
-          MIN(timestamp) as earliestEvent,
-          MAX(timestamp) as latestEvent
-        FROM ${this.tableName}
+          COUNT(*) as totalMessages,
+          COUNT(CASE WHEN direction = 'incoming' THEN 1 END) as incomingMessages,
+          COUNT(CASE WHEN direction = 'outgoing' THEN 1 END) as outgoingMessages,
+          COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'ai' THEN 1 END) as aiResponses,
+          COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'human' THEN 1 END) as humanResponses,
+          MIN(timestamp) as earliestMessage,
+          MAX(timestamp) as latestMessage
+        FROM messages
       `);
 
       return {
-        totalChats: summary.totalChats || 0,
-        totalMessages: summary.totalMessages || 0,
-        aiProcessed: summary.aiProcessed || 0,
-        humanProcessed: summary.humanProcessed || 0,
-        earliestEvent: summary.earliestEvent || null,
-        latestEvent: summary.latestEvent || null
+        totalChats: messageStats.totalChats || 0,
+        totalMessages: messageStats.totalMessages || 0,
+        incomingMessages: messageStats.incomingMessages || 0,
+        outgoingMessages: messageStats.outgoingMessages || 0,
+        aiResponses: messageStats.aiResponses || 0,
+        humanResponses: messageStats.humanResponses || 0,
+        aiProcessed: messageStats.aiResponses || 0, // For backward compatibility
+        humanProcessed: messageStats.humanResponses || 0, // For backward compatibility
+        earliestEvent: messageStats.earliestMessage || null,
+        latestEvent: messageStats.latestMessage || null
       };
     } catch (error) {
       logger.error('Failed to get analytics summary', { error: error.message });
@@ -63,7 +95,7 @@ class Analytics {
   }
 
   /**
-   * Get daily activity for date range
+   * Get daily activity from actual messages
    */
   async getDailyActivity(days = 7) {
     try {
@@ -80,25 +112,103 @@ class Analytics {
         const activity = await db.get(`
           SELECT
             COUNT(*) as totalCount,
-            COUNT(CASE WHEN type = 'message' THEN 1 END) as messageCount,
-            COUNT(CASE WHEN type = 'message' AND is_ai = 1 THEN 1 END) as aiCount,
-            COUNT(CASE WHEN type = 'message' AND is_ai = 0 THEN 1 END) as humanCount
-          FROM ${this.tableName}
+            COUNT(CASE WHEN direction = 'incoming' THEN 1 END) as incomingCount,
+            COUNT(CASE WHEN direction = 'outgoing' THEN 1 END) as outgoingCount,
+            COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'ai' THEN 1 END) as aiCount,
+            COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'human' THEN 1 END) as humanCount
+          FROM messages
           WHERE timestamp BETWEEN ? AND ?
         `, [startDate.getTime(), endDate.getTime()]);
 
         activities.push({
           date: date.toISOString().split('T')[0],
           total: activity.totalCount || 0,
-          messages: activity.messageCount || 0,
+          incoming: activity.incomingCount || 0,
+          outgoing: activity.outgoingCount || 0,
           ai: activity.aiCount || 0,
-          human: activity.humanCount || 0
+          human: activity.humanCount || 0,
+          sent: activity.outgoingCount || 0, // For backward compatibility
+          received: activity.incomingCount || 0, // For backward compatibility
+          messages: activity.totalCount || 0 // For backward compatibility
         });
       }
 
       return activities;
     } catch (error) {
       logger.error('Failed to get daily activity', { error: error.message, days });
+      throw error;
+    }
+  }
+
+  /**
+   * Get peak hours analysis from actual messages
+   */
+  async getPeakHours(days = 7) {
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      startDate.setHours(0, 0, 0, 0);
+
+      const hourlyData = await db.all(`
+        SELECT
+          CAST(strftime('%H', datetime(timestamp/1000, 'unixepoch')) AS INTEGER) as hour,
+          COUNT(*) as totalCount,
+          COUNT(CASE WHEN direction = 'incoming' THEN 1 END) as incomingCount,
+          COUNT(CASE WHEN direction = 'outgoing' THEN 1 END) as outgoingCount,
+          COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'ai' THEN 1 END) as aiCount,
+          COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'human' THEN 1 END) as humanCount
+        FROM messages
+        WHERE timestamp >= ?
+        GROUP BY CAST(strftime('%H', datetime(timestamp/1000, 'unixepoch')) AS INTEGER)
+        ORDER BY hour
+      `, [startDate.getTime()]);
+
+      // Fill missing hours with 0 and calculate intensity for mountain chart
+      const result = Array.from({ length: 24 }, (_, i) => {
+        const hourData = hourlyData.find(h => h.hour === i);
+        const total = hourData?.totalCount || 0;
+
+        return {
+          hour: i,
+          hourLabel: `${i.toString().padStart(2, '0')}:00`,
+          total: total,
+          incoming: hourData?.incomingCount || 0,
+          outgoing: hourData?.outgoingCount || 0,
+          ai: hourData?.aiCount || 0,
+          human: hourData?.humanCount || 0,
+          messages: total,
+          intensity: total // For mountain chart visualization
+        };
+      });
+
+      // Find peak hours
+      const maxMessages = Math.max(...result.map(h => h.total));
+      const peakHours = result.filter(h => h.total > 0);
+      const busiestHour = result.reduce((max, hour) =>
+        hour.total > max.total ? hour : max, result[0]);
+
+      return {
+        hourlyData: result,
+        peakHours: peakHours,
+        busiestHour: busiestHour,
+        maxMessages: maxMessages,
+        totalDays: days
+      };
+    } catch (error) {
+      logger.error('Failed to get peak hours analysis', { error: error.message, days });
+      throw error;
+    }
+  }
+
+  /**
+   * Get hourly activity from actual messages (for backward compatibility)
+   */
+  async getHourlyActivity(days = 7) {
+    try {
+      const peakHoursData = await this.getPeakHours(days);
+      return peakHoursData.hourlyData;
+    } catch (error) {
+      logger.error('Failed to get hourly activity', { error: error.message, days });
       throw error;
     }
   }
@@ -149,6 +259,49 @@ class Analytics {
       };
     } catch (error) {
       logger.error('Failed to get chat analytics', { error: error.message, chatId, days });
+      throw error;
+    }
+  }
+
+  /**
+   * Get overview analytics from actual messages
+   */
+  async getOverview(days = 7) {
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      startDate.setHours(0, 0, 0, 0);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const overview = await db.get(`
+        SELECT
+          COUNT(DISTINCT chat_id) as totalChats,
+          COUNT(*) as totalMessages,
+          COUNT(CASE WHEN direction = 'incoming' THEN 1 END) as incomingMessages,
+          COUNT(CASE WHEN direction = 'outgoing' THEN 1 END) as outgoingMessages,
+          COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'ai' THEN 1 END) as aiResponses,
+          COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'human' THEN 1 END) as humanResponses,
+          COUNT(CASE WHEN timestamp >= ? THEN 1 END) as todayMessages,
+          MIN(timestamp) as earliestMessage,
+          MAX(timestamp) as latestMessage
+        FROM messages
+        WHERE timestamp >= ?
+      `, [Math.floor(todayStart.getTime() / 1000), Math.floor(startDate.getTime() / 1000)]);
+
+      return {
+        totalChats: overview.totalChats || 0,
+        totalMessages: overview.totalMessages || 0,
+        incomingMessages: overview.incomingMessages || 0,
+        outgoingMessages: overview.outgoingMessages || 0,
+        aiProcessed: overview.aiResponses || 0,
+        humanProcessed: overview.humanResponses || 0,
+        messagesToday: overview.todayMessages || 0,
+        earliestEvent: overview.earliestMessage || null,
+        latestEvent: overview.latestMessage || null
+      };
+    } catch (error) {
+      logger.error('Failed to get overview', { error: error.message, days });
       throw error;
     }
   }
@@ -245,6 +398,126 @@ class Analytics {
       return distribution;
     } catch (error) {
       logger.error('Failed to get message type distribution', { error: error.message, days });
+      throw error;
+    }
+  }
+
+  /**
+   * Get detailed message statistics with human/AI breakdown
+   */
+  async getDetailedMessageStats(chatId = null, days = 30) {
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      startDate.setHours(0, 0, 0, 0);
+
+      let whereClause = 'WHERE timestamp >= ?';
+      const params = [startDate.getTime()];
+
+      if (chatId) {
+        whereClause += ' AND chat_id = ?';
+        params.push(chatId);
+      }
+
+      const stats = await db.get(`
+        SELECT
+          COUNT(*) as totalMessages,
+          COUNT(CASE WHEN direction = 'incoming' THEN 1 END) as incomingMessages,
+          COUNT(CASE WHEN direction = 'outgoing' THEN 1 END) as outgoingMessages,
+          COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'ai' THEN 1 END) as aiMessages,
+          COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'human' THEN 1 END) as humanMessages,
+          COUNT(CASE WHEN direction = 'incoming' THEN 1 END) as customerMessages,
+          COUNT(CASE WHEN has_media = 1 THEN 1 END) as mediaMessages,
+          COUNT(DISTINCT chat_id) as totalChats,
+          MIN(timestamp) as earliestMessage,
+          MAX(timestamp) as latestMessage
+        FROM messages
+        ${whereClause}
+      `, params);
+
+      // Get daily breakdown
+      const dailyBreakdown = await db.all(`
+        SELECT
+          DATE(datetime(timestamp/1000, 'unixepoch')) as date,
+          COUNT(*) as totalMessages,
+          COUNT(CASE WHEN direction = 'incoming' THEN 1 END) as incomingMessages,
+          COUNT(CASE WHEN direction = 'outgoing' THEN 1 END) as outgoingMessages,
+          COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'ai' THEN 1 END) as aiMessages,
+          COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'human' THEN 1 END) as humanMessages,
+          COUNT(CASE WHEN has_media = 1 THEN 1 END) as mediaMessages
+        FROM messages
+        ${whereClause}
+        GROUP BY DATE(datetime(timestamp/1000, 'unixepoch'))
+        ORDER BY date DESC
+        LIMIT ?
+      `, [...params, days]);
+
+      // Get hourly breakdown (peak hours analysis)
+      const hourlyBreakdown = await db.all(`
+        SELECT
+          CAST(strftime('%H', datetime(timestamp/1000, 'unixepoch')) AS INTEGER) as hour,
+          COUNT(*) as totalMessages,
+          COUNT(CASE WHEN direction = 'incoming' THEN 1 END) as incomingMessages,
+          COUNT(CASE WHEN direction = 'outgoing' THEN 1 END) as outgoingMessages,
+          COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'ai' THEN 1 END) as aiMessages,
+          COUNT(CASE WHEN direction = 'outgoing' AND sender_type = 'human' THEN 1 END) as humanMessages
+        FROM messages
+        ${whereClause}
+        GROUP BY CAST(strftime('%H', datetime(timestamp/1000, 'unixepoch')) AS INTEGER)
+        ORDER BY hour
+      `, params);
+
+      // Fill missing hours with 0
+      const completeHourlyBreakdown = Array.from({ length: 24 }, (_, i) => {
+        const hourData = hourlyBreakdown.find(h => h.hour === i);
+        return {
+          hour: i,
+          hourLabel: `${i.toString().padStart(2, '0')}:00`,
+          totalMessages: hourData?.totalMessages || 0,
+          incomingMessages: hourData?.incomingMessages || 0,
+          outgoingMessages: hourData?.outgoingMessages || 0,
+          aiMessages: hourData?.aiMessages || 0,
+          humanMessages: hourData?.humanMessages || 0
+        };
+      });
+
+      return {
+        summary: {
+          totalMessages: stats.totalMessages || 0,
+          incomingMessages: stats.incomingMessages || 0,
+          outgoingMessages: stats.outgoingMessages || 0,
+          aiMessages: stats.aiMessages || 0,
+          humanMessages: stats.humanMessages || 0,
+          customerMessages: stats.customerMessages || 0,
+          mediaMessages: stats.mediaMessages || 0,
+          totalChats: stats.totalChats || 0,
+          earliestMessage: stats.earliestMessage,
+          latestMessage: stats.latestMessage,
+          avgMessagesPerDay: stats.totalMessages ? Math.round(stats.totalMessages / days) : 0,
+          aiResponseRate: stats.outgoingMessages ? Math.round((stats.aiMessages / stats.outgoingMessages) * 100) : 0,
+          humanResponseRate: stats.outgoingMessages ? Math.round((stats.humanMessages / stats.outgoingMessages) * 100) : 0
+        },
+        dailyBreakdown: dailyBreakdown.map(day => ({
+          date: day.date,
+          totalMessages: day.totalMessages,
+          incomingMessages: day.incomingMessages,
+          outgoingMessages: day.outgoingMessages,
+          aiMessages: day.aiMessages,
+          humanMessages: day.humanMessages,
+          mediaMessages: day.mediaMessages,
+          aiResponseRate: day.outgoingMessages ? Math.round((day.aiMessages / day.outgoingMessages) * 100) : 0,
+          humanResponseRate: day.outgoingMessages ? Math.round((day.humanMessages / day.outgoingMessages) * 100) : 0
+        })),
+        hourlyBreakdown: completeHourlyBreakdown,
+        filters: {
+          chatId: chatId || 'all',
+          days: days,
+          startDate: startDate.toISOString(),
+          endDate: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      logger.error('Failed to get detailed message stats', { error: error.message, chatId, days });
       throw error;
     }
   }

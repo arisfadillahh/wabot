@@ -190,6 +190,8 @@ class WhatsAppService extends EventEmitter {
         senderId: message.from,
         body: message.body,
         type: message.type,
+        direction: 'incoming',
+        senderType: 'customer',
         timestamp: message.timestamp,
         fromMe: message.fromMe,
         hasMedia: message.hasMedia,
@@ -252,8 +254,8 @@ class WhatsAppService extends EventEmitter {
         unreadCount: chat.unreadCount || 0
       });
 
-      // Log analytics
-      await Analytics.log('message', chatId, false, {
+      // Log analytics with proper message tracking
+      await Analytics.logMessage(chatId, 'incoming', 'customer', {
         messageId: message.id._serialized,
         message: message.body,
         hasMedia: message.hasMedia,
@@ -292,6 +294,8 @@ class WhatsAppService extends EventEmitter {
         senderId: this.client.info.wid._serialized,
         body: message.body,
         type: message.type,
+        direction: 'outgoing',
+        senderType: 'human', // Sent from another device by human
         timestamp: message.timestamp,
         fromMe: true,
         hasMedia: message.hasMedia,
@@ -477,6 +481,8 @@ class WhatsAppService extends EventEmitter {
         senderId: this.client.info.wid._serialized,
         body: message,
         type: 'chat',
+        direction: 'outgoing',
+        senderType: 'human', // Sent by human agent
         timestamp: sentMessage.timestamp,
         fromMe: true,
         hasMedia: false,
@@ -484,8 +490,8 @@ class WhatsAppService extends EventEmitter {
         isAiGenerated: false
       });
 
-      // Log analytics
-      await Analytics.log('message', chatId, false, {
+      // Log analytics with proper message tracking
+      await Analytics.logMessage(chatId, 'outgoing', 'human', {
         messageId: sentMessage.id._serialized,
         message: message,
         source: 'dashboard',
@@ -826,6 +832,30 @@ class WhatsAppService extends EventEmitter {
         error: error.message,
         timestamp: Date.now()
       };
+    }
+  }
+
+  /**
+   * Get detailed message statistics with human/AI breakdown
+   */
+  async getDetailedMessageStats(chatId = null, days = 30) {
+    try {
+      logger.whatsapp('getting_detailed_message_stats', { chatId, days });
+
+      const stats = await Analytics.getDetailedMessageStats(chatId, days);
+
+      logger.whatsapp('detailed_message_stats_retrieved', {
+        chatId,
+        days,
+        totalMessages: stats.totalMessages,
+        humanMessages: stats.humanMessages,
+        aiMessages: stats.aiMessages
+      });
+
+      return stats;
+    } catch (error) {
+      logger.error('Failed to get detailed message stats', { error: error.message, chatId, days });
+      throw error;
     }
   }
 }

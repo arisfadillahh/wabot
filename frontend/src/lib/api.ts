@@ -177,6 +177,14 @@ class ApiClient {
     return this.request(`/api/v1/analytics/dashboard?days=${days}`);
   }
 
+  async getDailyActivity(days = 7) {
+    return this.request(`/api/v1/analytics/daily?days=${days}`);
+  }
+
+  async getTrends(days = 7) {
+    return this.request(`/api/v1/analytics/trends?days=${days}`);
+  }
+
   
   // Chat Settings
   async getChatSettings() {

@@ -233,7 +233,7 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
 
   return (
     <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}>
-      <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-2' : 'order-1'}`}>
+      <div className={`inline-block max-w-md ${isOwn ? 'order-2' : 'order-1'}`}>
         <div
           className={`p-3 rounded-lg ${
             isOwn

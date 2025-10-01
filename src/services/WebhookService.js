@@ -255,11 +255,12 @@ class WebhookService extends EventEmitter {
         throw new Error('chatId and message are required for AI reply');
       }
 
-      // Log AI reply analytics
-      await Analytics.log('ai_reply', chatId, true, {
+      // Log AI reply analytics with proper message tracking
+      await Analytics.logMessage(chatId, 'outgoing', 'ai', {
         originalMessageId,
         message,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        source: 'ai_webhook'
       });
 
       // Store AI message in database if it has an ID
@@ -270,6 +271,8 @@ class WebhookService extends EventEmitter {
           senderId: 'ai_system',
           body: message,
           type: 'chat',
+          direction: 'outgoing',
+          senderType: 'ai',
           timestamp: Math.floor(Date.now() / 1000),
           fromMe: true,
           hasMedia: false,
