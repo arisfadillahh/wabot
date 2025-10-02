@@ -43,6 +43,7 @@ interface ChatListItemProps {
   chat: any;
   isSelected?: boolean;
   onClick: () => void;
+  searchQuery?: string;
 }
 
 interface MessageBubbleProps {
@@ -122,7 +123,7 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
   );
 }
 
-function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
+function ChatListItem({ chat, isSelected, onClick, searchQuery }: ChatListItemProps) {
   const getUnreadCount = () => {
     if (chat.unreadCount > 0) {
       return (
@@ -141,6 +142,24 @@ function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
       .join('')
       .substring(0, 2)
       .toUpperCase();
+  };
+
+  // Helper function to get message text
+  const getMessageText = (message: any) => {
+    if (!message?.content) return '';
+    if (typeof message.content === 'string') return message.content;
+    return message.content?.body || message.content?.text || String(message.content || '');
+  };
+
+  // Helper function to highlight search matches
+  const highlightSearchText = (text: string, query: string) => {
+    if (!query) return text;
+    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    return parts.map((part, index) =>
+      part.toLowerCase() === query.toLowerCase() ? (
+        <span key={index} className="bg-yellow-200 dark:bg-yellow-800 font-semibold">{part}</span>
+      ) : part
+    );
   };
 
   const isAIMode = chat.aiMode ?? true;
@@ -166,7 +185,7 @@ function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-              {chat.name}
+              {highlightSearchText(chat.name, searchQuery || '')}
             </p>
             <div className={cn(
               'flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium',
@@ -194,7 +213,7 @@ function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
           <div className="flex items-center mt-1">
             <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
               {chat.lastMessage.fromMe ? 'You: ' : ''}
-              {chat.lastMessage.content}
+              {highlightSearchText(getMessageText(chat.lastMessage), searchQuery || '')}
             </p>
           </div>
         )}
@@ -355,12 +374,30 @@ export default function ChatsPage() {
   }, [messages]);
 
   const filteredChats = chats.filter(chat => {
-    const matchesSearch = chat.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const searchLower = searchQuery.toLowerCase();
+
+    // Search in contact name
+    const matchesName = chat.name.toLowerCase().includes(searchLower);
+
+    // Search in last message content
+    let matchesMessage = false;
+    if (chat.lastMessage?.content) {
+      const messageContent = typeof chat.lastMessage.content === 'string'
+        ? chat.lastMessage.content.toLowerCase()
+        : chat.lastMessage.content?.body?.toLowerCase() ||
+          chat.lastMessage.content?.text?.toLowerCase() ||
+          String(chat.lastMessage.content || '').toLowerCase();
+      matchesMessage = messageContent.includes(searchLower);
+    }
+
+    const matchesSearch = matchesName || matchesMessage;
+
     if (activeTab === 'ai') return matchesSearch && (chat.aiMode ?? true);
     if (activeTab === 'human') return matchesSearch && !(chat.aiMode ?? true);
     return matchesSearch;
   });
 
+  
   const getChatsCount = (tab: 'ai' | 'human') => {
     if (tab === 'ai') {
       const aiChats = chats.filter(chat => chat.aiMode ?? true);
@@ -553,6 +590,7 @@ export default function ChatsPage() {
                     chat={chat}
                     isSelected={selectedChat?.id === chat.id}
                     onClick={() => selectChat(chat)}
+                    searchQuery={searchQuery}
                   />
                 ))}
               </div>
