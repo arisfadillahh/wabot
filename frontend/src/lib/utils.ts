@@ -24,9 +24,15 @@ export function formatTime(date: Date | string): string {
   });
 }
 
-export function formatRelativeTime(date: Date | string): string {
+export function formatRelativeTime(date: Date | string | number): string {
   const d = new Date(date);
   const now = new Date();
+
+  // Check if date is invalid
+  if (isNaN(d.getTime())) {
+    return 'Invalid date';
+  }
+
   const diffMs = now.getTime() - d.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMins / 60);

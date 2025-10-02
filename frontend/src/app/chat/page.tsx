@@ -74,9 +74,9 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
       animate={{ opacity: 1, y: 0 }}
       className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}
     >
-      <div className={`inline-block max-w-md ${isOwn ? 'order-2' : 'order-1'}`}>
+      <div className={`max-w-[70%] ${isOwn ? 'order-2 text-right' : 'order-1 text-left'}`}>
         <div
-          className={`px-3 py-2 rounded-lg ${
+          className={`inline-block px-3 py-2 rounded-lg text-left ${
             isOwn
               ? 'bg-[#128C7E] text-white' // WhatsApp dark green for sent messages
               : 'bg-gray-200 text-gray-900 border border-gray-300' // Darker gray for received messages
@@ -106,11 +106,13 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
             </div>
           )}
         </div>
-        <div className={`flex items-center mt-1 space-x-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-          <span className="text-xs text-gray-500">
+        <div className={`flex items-center mt-1 space-x-1 ${isOwn ? 'justify-end' : 'justify-start'} min-h-[16px]`}>
+          <span className="text-xs text-gray-500 flex-shrink-0">
             {formatRelativeTime(message.timestamp)}
           </span>
-          {getStatusIcon()}
+          <div className="w-4 h-3 flex items-center justify-center flex-shrink-0">
+            {getStatusIcon()}
+          </div>
         </div>
       </div>
     </motion.div>

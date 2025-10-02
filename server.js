@@ -423,7 +423,7 @@ async function getWhatsAppMessages(chatId, limit = 50) {
                 chatId: chatId,
                 sender: msg.from,
                 body: msg.body || '',
-                timestamp: msg.timestamp,
+                timestamp: msg.timestamp * 1000, // Convert Unix timestamp (seconds) to milliseconds
                 fromMe: msg.fromMe,
                 type: msg.type,
                 hasMedia: msg.hasMedia,
@@ -1905,7 +1905,7 @@ app.get('/api/messages/:chatId', sessionAuthMiddleware, async (req, res) => {
                     chatId: chatId,
                     body: 'Hello! This is a demo message.',
                     fromMe: false,
-                    timestamp: new Date(Date.now() - 3600000).toISOString(),
+                    timestamp: Date.now() - 3600000, // 1 hour ago in milliseconds
                     type: 'chat',
                     status: 'delivered'
                 },
@@ -1914,7 +1914,7 @@ app.get('/api/messages/:chatId', sessionAuthMiddleware, async (req, res) => {
                     chatId: chatId,
                     body: 'This is a demo response from the system.',
                     fromMe: true,
-                    timestamp: new Date(Date.now() - 1800000).toISOString(),
+                    timestamp: Date.now() - 1800000, // 30 minutes ago in milliseconds
                     type: 'chat',
                     status: 'delivered'
                 }
@@ -1969,7 +1969,7 @@ app.get('/api/messages/:chatId', sessionAuthMiddleware, async (req, res) => {
                 chatId: chatId,
                 body: 'Messages are temporarily unavailable. Showing demo data.',
                 fromMe: false,
-                timestamp: new Date().toISOString(),
+                timestamp: Date.now(), // Current time in milliseconds
                 type: 'chat',
                 status: 'delivered'
             }

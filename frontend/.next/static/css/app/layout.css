@@ -914,6 +914,9 @@ video {
 .min-h-screen {
   min-height: 100vh;
 }
+.min-h-\[16px\] {
+  min-height: 16px;
+}
 .w-0 {
   width: 0px;
 }
@@ -998,6 +1001,9 @@ video {
 }
 .max-w-md {
   max-width: 28rem;
+}
+.max-w-\[70\%\] {
+  max-width: 70%;
 }
 .flex-1 {
   flex: 1 1 0%;
@@ -1596,8 +1602,14 @@ video {
 .pt-4 {
   padding-top: 1rem;
 }
+.text-left {
+  text-align: left;
+}
 .text-center {
   text-align: center;
+}
+.text-right {
+  text-align: right;
 }
 .font-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
