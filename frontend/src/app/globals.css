@@ -112,4 +112,17 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  .animate-fade-in {
+    animation: fadeInSimple 0.2s ease-out;
+  }
+
+  @keyframes fadeInSimple {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 }

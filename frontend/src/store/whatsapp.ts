@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import Cookies from 'js-cookie';
 import { WhatsAppStatus, ClientInfo, Chat, Message } from '@/types/api';
 import { api } from '@/lib/api';
 import { websocketService } from '@/lib/websocket';
@@ -299,15 +300,17 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => {
     },
 
     fetchMessages: async (chatId: string) => {
-      console.log('Fetching messages for chat:', chatId);
+      console.log('🔍 Fetching messages for chat:', chatId);
       set({ isLoading: true, error: null });
 
       try {
         const response = await api.getMessages(chatId) as any;
-        console.log('Messages response:', response);
+        console.log('📨 Messages API response:', response);
+        console.log('📨 Messages count:', response?.messages?.length || 0);
+        console.log('📨 First message sample:', response?.messages?.[0]);
         set({ messages: response.messages || [], isLoading: false });
       } catch (error) {
-        console.error('Error fetching messages:', error);
+        console.error('❌ Error fetching messages:', error);
         set({
           error: error instanceof Error ? error.message : 'Failed to fetch messages',
           isLoading: false,

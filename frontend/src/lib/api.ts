@@ -153,6 +153,7 @@ class ApiClient {
   }
 
   async getMessages(chatId: string, limit = 50) {
+    console.log('📡 API: Getting messages for chat:', chatId, 'limit:', limit);
     return this.request(`/api/messages/${chatId}?limit=${limit}`);
   }
 

@@ -61,7 +61,8 @@ export interface Message {
   chatId: string;
   from: string;
   to: string;
-  content: string;
+  content: string | any; // Can be string or object with various properties
+  body?: string; // WhatsApp Web.js often uses body property
   type: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker';
   timestamp: string;
   fromMe: boolean;
