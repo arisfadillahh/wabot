@@ -258,11 +258,16 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
 
 function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
   const getUnreadCount = () => {
-    return chat.unreadCount > 0 ? (
-      <Badge variant="destructive" className="ml-auto bg-green-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center p-0">
-        {chat.unreadCount}
-      </Badge>
-    ) : null;
+    // Only show badge if there are unread messages (count > 0)
+    if (chat.unreadCount > 0) {
+      return (
+        <Badge variant="destructive" className="ml-auto bg-green-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center p-0">
+          {chat.unreadCount}
+        </Badge>
+      );
+    }
+    // Return null for 0 unread messages - no circle, no number
+    return null;
   };
 
   const getChatInitials = (name: string) => {
@@ -724,18 +729,20 @@ export default function ChatsPage() {
                   >
                     Bot AI
                   </motion.span>
-                  <motion.div
-                    animate={{ scale: activeTab === 'ai' ? 1.1 : 1 }}
-                    className="flex-shrink-0"
-                  >
-                    <Badge className={`text-xs font-semibold min-w-[24px] h-5 flex items-center justify-center px-1.5 ${
-                      activeTab === 'ai'
-                        ? 'bg-white/30 text-white backdrop-blur-sm'
-                        : 'bg-gray-200 text-gray-600'
-                    }`}>
-                      {getChatsCount('ai')}
-                    </Badge>
-                  </motion.div>
+                  {getChatsCount('ai') > 0 && (
+                    <motion.div
+                      animate={{ scale: activeTab === 'ai' ? 1.1 : 1 }}
+                      className="flex-shrink-0"
+                    >
+                      <Badge className={`text-xs font-semibold min-w-[24px] h-5 flex items-center justify-center px-1.5 ${
+                        activeTab === 'ai'
+                          ? 'bg-white/30 text-white backdrop-blur-sm'
+                          : 'bg-gray-200 text-gray-600'
+                      }`}>
+                        {getChatsCount('ai')}
+                      </Badge>
+                    </motion.div>
+                  )}
                 </div>
               </motion.div>
 
@@ -779,18 +786,20 @@ export default function ChatsPage() {
                   >
                     Human Agent
                   </motion.span>
-                  <motion.div
-                    animate={{ scale: activeTab === 'human' ? 1.1 : 1 }}
-                    className="flex-shrink-0"
-                  >
-                    <Badge className={`text-xs font-semibold min-w-[24px] h-5 flex items-center justify-center px-1.5 ${
-                      activeTab === 'human'
-                        ? 'bg-white/30 text-white backdrop-blur-sm'
-                        : 'bg-gray-200 text-gray-600'
-                    }`}>
-                      {getChatsCount('human')}
-                    </Badge>
-                  </motion.div>
+                  {getChatsCount('human') > 0 && (
+                    <motion.div
+                      animate={{ scale: activeTab === 'human' ? 1.1 : 1 }}
+                      className="flex-shrink-0"
+                    >
+                      <Badge className={`text-xs font-semibold min-w-[24px] h-5 flex items-center justify-center px-1.5 ${
+                        activeTab === 'human'
+                          ? 'bg-white/30 text-white backdrop-blur-sm'
+                          : 'bg-gray-200 text-gray-600'
+                      }`}>
+                        {getChatsCount('human')}
+                      </Badge>
+                    </motion.div>
+                  )}
                 </div>
               </motion.div>
             </div>

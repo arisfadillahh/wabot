@@ -30,11 +30,16 @@ export function RecentChats() {
   };
 
   const getUnreadCount = (chat: any) => {
-    return chat.unreadCount > 0 ? (
-      <Badge variant="destructive" className="ml-auto">
-        {chat.unreadCount}
-      </Badge>
-    ) : null;
+    // Only show badge if there are unread messages (count > 0)
+    if (chat.unreadCount > 0) {
+      return (
+        <Badge variant="destructive" className="ml-auto">
+          {chat.unreadCount}
+        </Badge>
+      );
+    }
+    // Return null for 0 unread messages - no badge, no number
+    return null;
   };
 
   if (isLoading) {
